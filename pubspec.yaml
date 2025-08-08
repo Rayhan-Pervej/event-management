@@ -1,0 +1,31 @@
+name: event_management
+description: "Every type of event managements with your team"
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  firebase_core: ^3.15.1
+  cloud_firestore: ^5.6.11
+  firebase_auth: ^5.6.2
+  provider: ^6.1.5
+  icons_plus: ^5.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+flutter:
+
+  uses-material-design: true
+

@@ -1,0 +1,276 @@
+// File: providers/event_details_provider.dart
+import 'package:event_management/models/task_model.dart';
+import 'package:event_management/models/event_model.dart';
+import 'package:event_management/repository/event_repository.dart';
+import 'package:event_management/repository/task_repository.dart';
+import 'package:flutter/material.dart';
+
+class EventDetailsProvider extends ChangeNotifier {
+  final TasksRepository _tasksRepository = TasksRepository();
+  final EventsRepository _eventsRepository = EventsRepository();
+
+  // State variables
+  List<TaskModel> _tasks = [];
+  bool _isLoadingTasks = false;
+  bool _isLoadingEvent = false;
+  String? _errorMessage;
+  EventModel? _event;
+
+  // Getters
+  List<TaskModel> get tasks => _tasks;
+  bool get isLoadingTasks => _isLoadingTasks;
+  bool get isLoadingEvent => _isLoadingEvent;
+  String? get errorMessage => _errorMessage;
+  EventModel? get event => _event;
+
+  // Task filtering
+  List<TaskModel> get pendingTasks => _tasks.where((task) => task.isPending).toList();
+  List<TaskModel> get inProgressTasks => _tasks.where((task) => task.isInProgress).toList();
+  List<TaskModel> get completedTasks => _tasks.where((task) => task.isCompleted).toList();
+  List<TaskModel> get overdueTasks => _tasks.where((task) => task.isOverdue).toList();
+
+  // Task counts
+  int get totalTasks => _tasks.length;
+  int get pendingCount => pendingTasks.length;
+  int get inProgressCount => inProgressTasks.length;
+  int get completedCount => completedTasks.length;
+  int get overdueCount => overdueTasks.length;
+
+  // Get user-specific tasks
+  List<TaskModel> getUserTasks(String userId) {
+    return _tasks.where((task) => task.isAssignedToUser(userId)).toList();
+  }
+
+  List<TaskModel> getUserPendingTasks(String userId) {
+    return getUserTasks(userId).where((task) => task.isPending).toList();
+  }
+
+  List<TaskModel> getUserCompletedTasks(String userId) {
+    return getUserTasks(userId).where((task) => task.isCompletedByUser(userId)).toList();
+  }
+
+  // Initialize event details
+  Future<void> initialize(String eventId) async {
+    _setLoadingEvent(true);
+    _clearError();
+    
+    try {
+      await Future.wait([
+        _loadEvent(eventId),
+        loadTasks(eventId),
+      ]);
+    } catch (e) {
+      _setError('Failed to initialize: ${e.toString()}');
+    } finally {
+      _setLoadingEvent(false);
+    }
+  }
+
+  // Load event details
+  Future<void> _loadEvent(String eventId) async {
+    try {
+      _event = await _eventsRepository.getEventById(eventId);
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to load event details: ${e.toString()}');
+    }
+  }
+
+  // Load tasks for the event
+  Future<void> loadTasks(String eventId) async {
+    _setLoadingTasks(true);
+    _clearError();
+
+    try {
+      _tasks = await _tasksRepository.getTasksByEventId(eventId);
+      _sortTasks();
+    } catch (e) {
+      _setError('Failed to load tasks: ${e.toString()}');
+    } finally {
+      _setLoadingTasks(false);
+    }
+  }
+
+  // Refresh all data
+  Future<void> refresh(String eventId) async {
+    try {
+      // Force fetch fresh data from the database
+      _event = await _eventsRepository.getEventById(eventId);
+      _tasks = await _tasksRepository.getTasksByEventId(eventId);
+      _sortTasks();
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to refresh: ${e.toString()}');
+    }
+  }
+
+  // Force refresh event data only
+  Future<void> refreshEvent(String eventId) async {
+    try {
+      _event = await _eventsRepository.getEventById(eventId);
+      notifyListeners();
+    } catch (e) {
+      _setError('Failed to refresh event: ${e.toString()}');
+    }
+  }
+
+  // Update event locally (called when changes are made from other screens)
+  void updateEvent(EventModel updatedEvent) {
+    _event = updatedEvent;
+    notifyListeners();
+  }
+
+  // Member management methods
+  Future<void> promoteToAdmin(String eventId, String memberId) async {
+    try {
+      await _eventsRepository.promoteMemberToAdmin(eventId, memberId);
+      if (_event != null) {
+        final member = _event!.members.firstWhere((m) => m.id == memberId);
+        _event!.members.remove(member);
+        _event!.admins.add(member);
+        notifyListeners();
+      }
+    } catch (e) {
+      _setError('Failed to promote member: ${e.toString()}');
+    }
+  }
+
+  Future<void> removeFromEvent(String eventId, String memberId) async {
+    try {
+      await _eventsRepository.removeUserFromEvent(eventId, memberId);
+      if (_event != null) {
+        _event!.members.removeWhere((m) => m.id == memberId);
+        _event!.admins.removeWhere((m) => m.id == memberId);
+        notifyListeners();
+      }
+    } catch (e) {
+      _setError('Failed to remove member: ${e.toString()}');
+    }
+  }
+
+  // Sort tasks by priority and due date
+  void _sortTasks() {
+    _tasks.sort((a, b) {
+      // First sort by completion status (incomplete first)
+      if (a.isCompleted != b.isCompleted) {
+        return a.isCompleted ? 1 : -1;
+      }
+
+      // Then by priority (high to low)
+      final priorityOrder = {'high': 0, 'medium': 1, 'low': 2};
+      final aPriority = priorityOrder[a.priority.toLowerCase()] ?? 1;
+      final bPriority = priorityOrder[b.priority.toLowerCase()] ?? 1;
+      
+      if (aPriority != bPriority) {
+        return aPriority.compareTo(bPriority);
+      }
+
+      // Finally by due date (earliest first)
+      return a.deadline.compareTo(b.deadline);
+    });
+  }
+
+  // Complete a task
+  Future<bool> completeTask(String taskId, String userId) async {
+    try {
+      final success = await _tasksRepository.completeTask(taskId, userId);
+      if (success) {
+        // Update local task
+        final taskIndex = _tasks.indexWhere((task) => task.id == taskId);
+        if (taskIndex != -1) {
+          final updatedTask = _tasks[taskIndex].copyWith(
+            completedBy: [
+              ..._tasks[taskIndex].completedBy,
+              CompletionDetails(userId: userId, completedAt: DateTime.now()),
+            ],
+            status: 'completed',
+          );
+          _tasks[taskIndex] = updatedTask;
+          _sortTasks();
+          notifyListeners();
+        }
+      }
+      return success;
+    } catch (e) {
+      _setError('Failed to complete task: ${e.toString()}');
+      return false;
+    }
+  }
+
+  // Update task status
+  Future<bool> updateTaskStatus(String taskId, String newStatus) async {
+    try {
+      final success = await _tasksRepository.updateTaskStatus(taskId, newStatus);
+      if (success) {
+        // Update local task
+        final taskIndex = _tasks.indexWhere((task) => task.id == taskId);
+        if (taskIndex != -1) {
+          _tasks[taskIndex] = _tasks[taskIndex].copyWith(status: newStatus);
+          _sortTasks();
+          notifyListeners();
+        }
+      }
+      return success;
+    } catch (e) {
+      _setError('Failed to update task status: ${e.toString()}');
+      return false;
+    }
+  }
+
+  // Delete task (admin only)
+  Future<bool> deleteTask(String taskId) async {
+    try {
+      final success = await _tasksRepository.deleteTask(taskId);
+      if (success) {
+        _tasks.removeWhere((task) => task.id == taskId);
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      _setError('Failed to delete task: ${e.toString()}');
+      return false;
+    }
+  }
+
+  // Get recent tasks (last 3 for preview)
+  List<TaskModel> getRecentTasks({int limit = 3}) {
+    final sortedTasks = List<TaskModel>.from(_tasks);
+    sortedTasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sortedTasks.take(limit).toList();
+  }
+
+  // Get user's recent tasks
+  List<TaskModel> getUserRecentTasks(String userId, {int limit = 3}) {
+    final userTasks = getUserTasks(userId);
+    userTasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return userTasks.take(limit).toList();
+  }
+
+  // Private methods
+  void _setLoadingTasks(bool loading) {
+    _isLoadingTasks = loading;
+    notifyListeners();
+  }
+
+  void _setLoadingEvent(bool loading) {
+    _isLoadingEvent = loading;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _errorMessage = error;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    if (_errorMessage != null) {
+      _errorMessage = null;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+}

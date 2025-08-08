@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "702498665873",
+    "project_id": "event-management-d6255",
+    "storage_bucket": "event-management-d6255.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702498665873:android:e25e84b57d45a552e4d630",
+        "android_client_info": {
+          "package_name": "com.shadhintech.event.event_management"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDiffT911jcmoY2d71NiVMVA0hMPlZfm74"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
