@@ -23,22 +23,14 @@ class EventParticipant {
 
   // Convert to Map
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'firstName': firstName,
-      'lastName': lastName,
-    };
+    return {'id': id, 'firstName': firstName, 'lastName': lastName};
   }
 
   // Get full name
   String get fullName => '$firstName $lastName';
 
   // CopyWith method
-  EventParticipant copyWith({
-    String? id,
-    String? firstName,
-    String? lastName,
-  }) {
+  EventParticipant copyWith({String? id, String? firstName, String? lastName}) {
     return EventParticipant(
       id: id ?? this.id,
       firstName: firstName ?? this.firstName,
@@ -97,8 +89,16 @@ class EventModel {
       location: data['location'] ?? '',
       startDate: (data['startDate'] as Timestamp).toDate(),
       endDate: (data['endDate'] as Timestamp).toDate(),
-      admins: (data['admins'] as List?)?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>)).toList() ?? [],
-      members: (data['members'] as List?)?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>)).toList() ?? [],
+      admins:
+          (data['admins'] as List?)
+              ?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      members:
+          (data['members'] as List?)
+              ?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       createdBy: data['createdBy'] ?? '',
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
@@ -113,8 +113,16 @@ class EventModel {
       location: json['location'] ?? '',
       startDate: DateTime.parse(json['startDate']),
       endDate: DateTime.parse(json['endDate']),
-      admins: (json['admins'] as List?)?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>)).toList() ?? [],
-      members: (json['members'] as List?)?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>)).toList() ?? [],
+      admins:
+          (json['admins'] as List?)
+              ?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      members:
+          (json['members'] as List?)
+              ?.map((e) => EventParticipant.fromMap(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       createdBy: json['createdBy'] ?? '',
       createdAt: DateTime.parse(json['createdAt']),
     );
@@ -172,8 +180,8 @@ class EventModel {
       location: location ?? this.location,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
-      admins: admins ?? this.admins,
-      members: members ?? this.members,
+      admins: admins ?? List.from(this.admins), // ✅ Create new list instance
+      members: members ?? List.from(this.members), // ✅ Create new list instance
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -241,7 +249,9 @@ class EventModel {
   }
 
   EventModel removeAdmin(String userId) {
-    return copyWith(admins: admins.where((admin) => admin.id != userId).toList());
+    return copyWith(
+      admins: admins.where((admin) => admin.id != userId).toList(),
+    );
   }
 
   EventModel addMember(EventParticipant memberData) {
@@ -252,7 +262,9 @@ class EventModel {
   }
 
   EventModel removeMember(String userId) {
-    return copyWith(members: members.where((member) => member.id != userId).toList());
+    return copyWith(
+      members: members.where((member) => member.id != userId).toList(),
+    );
   }
 
   @override

@@ -40,9 +40,10 @@ class ManageTeamProvider extends ChangeNotifier {
   // Initialize with event
   void initialize(EventModel event) {
     _event = event;
-    _membersWereAdded = false; // Reset flag on initialization
-    // Don't call notifyListeners() here since this is initial setup
-    // and will be called during build phase
+    _membersWereAdded = false;
+    searchController.clear(); // ✅ Clear search on initialization
+    _searchResults.clear(); // ✅ Clear search results too
+    _selectedUsers.clear(); // ✅ Clear any previous selections
   }
 
   // Reset the members added flag
@@ -141,7 +142,7 @@ class ManageTeamProvider extends ChangeNotifier {
       final selectedUserIds = _selectedUsers.map((u) => u.uid).toSet();
       _searchResults.removeWhere((user) => selectedUserIds.contains(user.uid));
       _selectedUsers.clear();
-
+      searchController.clear();
       _setLoading(false);
 
       // Use post frame callback to avoid setState during build

@@ -24,10 +24,14 @@ class EventDetailsProvider extends ChangeNotifier {
   EventModel? get event => _event;
 
   // Task filtering
-  List<TaskModel> get pendingTasks => _tasks.where((task) => task.isPending).toList();
-  List<TaskModel> get inProgressTasks => _tasks.where((task) => task.isInProgress).toList();
-  List<TaskModel> get completedTasks => _tasks.where((task) => task.isCompleted).toList();
-  List<TaskModel> get overdueTasks => _tasks.where((task) => task.isOverdue).toList();
+  List<TaskModel> get pendingTasks =>
+      _tasks.where((task) => task.isPending).toList();
+  List<TaskModel> get inProgressTasks =>
+      _tasks.where((task) => task.isInProgress).toList();
+  List<TaskModel> get completedTasks =>
+      _tasks.where((task) => task.isCompleted).toList();
+  List<TaskModel> get overdueTasks =>
+      _tasks.where((task) => task.isOverdue).toList();
 
   // Task counts
   int get totalTasks => _tasks.length;
@@ -46,19 +50,18 @@ class EventDetailsProvider extends ChangeNotifier {
   }
 
   List<TaskModel> getUserCompletedTasks(String userId) {
-    return getUserTasks(userId).where((task) => task.isCompletedByUser(userId)).toList();
+    return getUserTasks(
+      userId,
+    ).where((task) => task.isCompletedByUser(userId)).toList();
   }
 
   // Initialize event details
   Future<void> initialize(String eventId) async {
     _setLoadingEvent(true);
     _clearError();
-    
+
     try {
-      await Future.wait([
-        _loadEvent(eventId),
-        loadTasks(eventId),
-      ]);
+      await Future.wait([_loadEvent(eventId), loadTasks(eventId)]);
     } catch (e) {
       _setError('Failed to initialize: ${e.toString()}');
     } finally {
@@ -120,31 +123,113 @@ class EventDetailsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Member management methods
+  // Updated promoteToAdmin method in EventDetailsProvider
   Future<void> promoteToAdmin(String eventId, String memberId) async {
+    if (_event == null) return;
+
     try {
+      // Update in Firestore first
       await _eventsRepository.promoteMemberToAdmin(eventId, memberId);
-      if (_event != null) {
-        final member = _event!.members.firstWhere((m) => m.id == memberId);
-        _event!.members.remove(member);
-        _event!.admins.add(member);
-        notifyListeners();
+
+      // Find the member to promote
+      final memberIndex = _event!.members.indexWhere((m) => m.id == memberId);
+      if (memberIndex == -1) {
+        throw Exception('Member not found');
       }
+
+      final member = _event!.members[memberIndex];
+
+      // Create new lists (since the original lists might be immutable)
+      final updatedMembers = List<EventParticipant>.from(_event!.members);
+      final updatedAdmins = List<EventParticipant>.from(_event!.admins);
+
+      // Remove from members and add to admins
+      updatedMembers.removeAt(memberIndex);
+      updatedAdmins.add(member);
+
+      // Create updated event with new lists
+      _event = _event!.copyWith(members: updatedMembers, admins: updatedAdmins);
+
+      notifyListeners();
     } catch (e) {
+      // If there's an error, refresh from database to ensure consistency
+      await refreshEvent(eventId);
       _setError('Failed to promote member: ${e.toString()}');
+      rethrow;
     }
   }
 
   Future<void> removeFromEvent(String eventId, String memberId) async {
+    if (_event == null) return;
+
     try {
+      // Update in Firestore first
       await _eventsRepository.removeUserFromEvent(eventId, memberId);
-      if (_event != null) {
-        _event!.members.removeWhere((m) => m.id == memberId);
-        _event!.admins.removeWhere((m) => m.id == memberId);
-        notifyListeners();
-      }
+
+      // Create new lists (since the original lists might be immutable)
+      final updatedMembers = List<EventParticipant>.from(_event!.members);
+      final updatedAdmins = List<EventParticipant>.from(_event!.admins);
+
+      // Remove from both lists
+      updatedMembers.removeWhere((m) => m.id == memberId);
+      updatedAdmins.removeWhere((m) => m.id == memberId);
+
+      // Create updated event with new lists
+      _event = _event!.copyWith(members: updatedMembers, admins: updatedAdmins);
+
+      notifyListeners();
     } catch (e) {
+      // If there's an error, refresh from database to ensure consistency
+      await refreshEvent(eventId);
       _setError('Failed to remove member: ${e.toString()}');
+      rethrow;
+    }
+  }
+
+  // In EventDetailsProvider - demoteToMember method
+  Future<void> demoteToMember(String eventId, String adminId) async {
+    if (_event == null) return;
+
+    try {
+    
+
+      // Update in Firestore first
+      await _eventsRepository.demoteAdminToMember(eventId, adminId);
+
+     
+
+      // Find the admin to demote
+      final adminIndex = _event!.admins.indexWhere((a) => a.id == adminId);
+      if (adminIndex == -1) {
+        throw Exception('Admin not found');
+      }
+
+      final admin = _event!.admins[adminIndex];
+
+      // Create new lists (this will now work properly with the fixed copyWith)
+      final updatedMembers = List<EventParticipant>.from(_event!.members);
+      final updatedAdmins = List<EventParticipant>.from(_event!.admins);
+
+      // Remove from admins and add to members
+      updatedAdmins.removeAt(adminIndex);
+      updatedMembers.add(admin);
+
+    
+
+      // Create updated event with new lists
+      _event = _event!.copyWith(members: updatedMembers, admins: updatedAdmins);
+
+    
+
+      notifyListeners();
+
+      
+    } catch (e) {
+     
+      // If there's an error, refresh from database to ensure consistency
+      await refreshEvent(eventId);
+      _setError('Failed to demote admin: ${e.toString()}');
+      rethrow;
     }
   }
 
@@ -160,7 +245,7 @@ class EventDetailsProvider extends ChangeNotifier {
       final priorityOrder = {'high': 0, 'medium': 1, 'low': 2};
       final aPriority = priorityOrder[a.priority.toLowerCase()] ?? 1;
       final bPriority = priorityOrder[b.priority.toLowerCase()] ?? 1;
-      
+
       if (aPriority != bPriority) {
         return aPriority.compareTo(bPriority);
       }
@@ -200,7 +285,10 @@ class EventDetailsProvider extends ChangeNotifier {
   // Update task status
   Future<bool> updateTaskStatus(String taskId, String newStatus) async {
     try {
-      final success = await _tasksRepository.updateTaskStatus(taskId, newStatus);
+      final success = await _tasksRepository.updateTaskStatus(
+        taskId,
+        newStatus,
+      );
       if (success) {
         // Update local task
         final taskIndex = _tasks.indexWhere((task) => task.id == taskId);

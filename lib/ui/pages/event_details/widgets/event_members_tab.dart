@@ -30,105 +30,115 @@ class EventMembersTab extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(AppDimensions.space16),
-      child: Column(
-        children: [
-          // Manage Team Button (Admin only)
-          if (isAdmin) ...[
-            DefaultButton(
-              text: 'Manage Team',
-              press: () async {
-                final result = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ManageTeamPage(event: event),
-                  ),
-                );
+    return Consumer<EventDetailsProvider>(
+      builder: (context, provider, child) {
+        // Use the provider's event if available, otherwise fall back to the passed event
+        final currentEvent = provider.event ?? event;
 
-                // If changes were made in ManageTeamPage, force refresh the data
-                if (result == true) {
-                  if (onRefresh != null) {
-                    onRefresh!();
-                  }
-                }
-              },
-              bgColor: colorScheme.primary,
-            ),
-            AppDimensions.h16,
-          ],
-
-          // Members List
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(AppDimensions.space16),
+          child: Column(
             children: [
-              // Admins Section
-              if (event.admins.isNotEmpty) ...[
-                _buildSectionHeader(
-                  context,
-                  title: 'Admins',
-                  count: event.admins.length,
-                  icon: Iconsax.shield_tick_outline,
+              // Manage Team Button (Admin only)
+              if (isAdmin) ...[
+                DefaultButton(
+                  text: 'Manage Team',
+                  press: () async {
+                    final result = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ManageTeamPage(event: currentEvent),
+                      ),
+                    );
+
+                    if (result == true) {
+                      if (onRefresh != null) {
+                        onRefresh!();
+                      }
+                    }
+                  },
+                  bgColor: colorScheme.primary,
                 ),
-                AppDimensions.h12,
-                ...event.admins.map(
-                  (admin) => _buildMemberCard(
-                    context,
-                    participant: admin,
-                    isAdminRole: true,
-                    isCurrentUser: admin.id == currentUserId,
-                  ),
-                ),
-                AppDimensions.h24,
+                AppDimensions.h16,
               ],
 
-              // Members Section
-              if (event.members.isNotEmpty) ...[
-                _buildSectionHeader(
-                  context,
-                  title: 'Members',
-                  count: event.members.length,
-                  icon: Iconsax.people_outline,
-                ),
-                AppDimensions.h12,
-                ...event.members.map(
-                  (member) => _buildMemberCard(
-                    context,
-                    participant: member,
-                    isAdminRole: false,
-                    isCurrentUser: member.id == currentUserId,
-                  ),
-                ),
-              ],
-
-              // Empty State
-              if (event.admins.isEmpty && event.members.isEmpty)
-                SizedBox(
-                  height: 300,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Iconsax.people_outline,
-                          size: 64,
-                          color: colorScheme.onSurface.withOpacity(0.3),
-                        ),
-                        AppDimensions.h16,
-                        BuildText(
-                          text: 'No team members yet',
-                          fontSize: 16,
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ],
+              // Members List - Use currentEvent instead of event
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Admins Section
+                  if (currentEvent.admins.isNotEmpty) ...[
+                    _buildSectionHeader(
+                      context,
+                      title: 'Admins',
+                      count: currentEvent.admins.length,
+                      icon: Iconsax.shield_tick_outline,
                     ),
-                  ),
-                ),
+                    AppDimensions.h12,
+                    ...currentEvent.admins.map(
+                      (admin) => _buildMemberCard(
+                        context,
+                        participant: admin,
+                        isAdminRole: true,
+                        isCurrentUser: admin.id == currentUserId,
+                        currentEvent: currentEvent,
+                      ),
+                    ),
+                    AppDimensions.h24,
+                  ],
+
+                  // Members Section
+                  if (currentEvent.members.isNotEmpty) ...[
+                    _buildSectionHeader(
+                      context,
+                      title: 'Members',
+                      count: currentEvent.members.length,
+                      icon: Iconsax.people_outline,
+                    ),
+                    AppDimensions.h12,
+                    ...currentEvent.members.map(
+                      (member) => _buildMemberCard(
+                        context,
+                        participant: member,
+                        isAdminRole: false,
+                        isCurrentUser: member.id == currentUserId,
+                        currentEvent: currentEvent,
+                      ),
+                    ),
+                  ],
+
+                  // Empty State
+                  if (currentEvent.admins.isEmpty &&
+                      currentEvent.members.isEmpty)
+                    SizedBox(
+                      height: 300,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Iconsax.people_outline,
+                              size: 64,
+                              color: colorScheme.onSurface.withOpacity(0.3),
+                            ),
+                            AppDimensions.h16,
+                            BuildText(
+                              text: 'No team members yet',
+                              fontSize: 16,
+                              color: colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -177,6 +187,7 @@ class EventMembersTab extends StatelessWidget {
     required EventParticipant participant,
     required bool isAdminRole,
     required bool isCurrentUser,
+    required EventModel currentEvent, // ✅ Add this parameter
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -275,7 +286,12 @@ class EventMembersTab extends StatelessWidget {
           if (isAdmin && !isCurrentUser) ...[
             IconButton(
               onPressed: () {
-                _showMemberActions(context, participant, isAdminRole);
+                _showMemberActions(
+                  context,
+                  participant,
+                  isAdminRole,
+                  currentEvent,
+                ); // ✅ Pass currentEvent
               },
               icon: Icon(
                 Iconsax.more_outline,
@@ -293,6 +309,7 @@ class EventMembersTab extends StatelessWidget {
     BuildContext context,
     EventParticipant participant,
     bool isAdminRole,
+    EventModel currentEvent, // ✅ Add this parameter
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -324,7 +341,25 @@ class EventMembersTab extends StatelessWidget {
                 title: const BuildText(text: 'Promote to Admin'),
                 onTap: () async {
                   Navigator.pop(context);
-                  await _promoteToAdmin(context, participant.id);
+                  await _promoteToAdmin(
+                    context,
+                    participant.id,
+                  ); // Keep existing method
+                },
+              ),
+            if (isAdminRole)
+              ListTile(
+                leading: Icon(
+                  Iconsax.user_outline,
+                  color: colorScheme.secondary,
+                ),
+                title: const BuildText(text: 'Demote to Member'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _demoteToMember(
+                    context,
+                    participant.id,
+                  ); // Keep existing method signature
                 },
               ),
             ListTile(
@@ -343,7 +378,10 @@ class EventMembersTab extends StatelessWidget {
                 );
 
                 if (confirm) {
-                  await provider.removeFromEvent(event.id, participant.id);
+                  await provider.removeFromEvent(
+                    currentEvent.id,
+                    participant.id,
+                  ); // ✅ Use currentEvent
                 }
               },
             ),
@@ -357,17 +395,39 @@ class EventMembersTab extends StatelessWidget {
     if (!context.mounted) return;
 
     try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
       final provider = Provider.of<EventDetailsProvider>(
         context,
         listen: false,
       );
+
       await provider.promoteToAdmin(event.id, memberId);
 
-      if (context.mounted && onRefresh != null) {
-        onRefresh!();
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Dismiss loading dialog
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Member promoted to admin successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Force refresh the data
+        if (onRefresh != null) {
+          onRefresh!();
+        }
       }
     } catch (e) {
       if (context.mounted) {
+        Navigator.of(context).pop(); // Dismiss loading dialog
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to promote member: ${e.toString()}'),
@@ -378,6 +438,64 @@ class EventMembersTab extends StatelessWidget {
     }
   }
 
+  // In EventMembersTab - _demoteToMember method
+Future<void> _demoteToMember(BuildContext context, String adminId) async {
+  if (!context.mounted) return;
+
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+
+  try {
+    final provider = Provider.of<EventDetailsProvider>(
+      context,
+      listen: false,
+    );
+
+    final currentEventId = provider.event?.id ?? event.id;
+    
+   
+
+    await provider.demoteToMember(currentEventId, adminId);
+
+  
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin demoted to member successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Force refresh the parent widget
+      if (onRefresh != null) {
+      
+        onRefresh!();
+      }
+
+     
+    }
+  } catch (e) {
+   
+    
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to demote admin: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
   String _getInitials(String name) {
     List<String> nameParts = name.split(' ');
     if (nameParts.length >= 2) {

@@ -225,30 +225,35 @@ class EventsRepository {
   }
 
   // Demote Admin to Member
-  Future<void> demoteAdminToMember(String eventId, String userId) async {
+  // In EventsRepository
+  Future<void> demoteAdminToMember(String eventId, String adminId) async {
     try {
-      final event = await getEventById(eventId);
-      if (event == null) throw Exception('Event not found');
+      final eventDoc = await _firestore.collection('events').doc(eventId).get();
+      if (!eventDoc.exists) throw Exception('Event not found');
 
-      final admin = event.getAdminById(userId);
-      if (admin == null) throw Exception('User is not an admin of this event');
+      final eventData = eventDoc.data()!;
+      final members = List<Map<String, dynamic>>.from(
+        eventData['members'] ?? [],
+      );
+      final admins = List<Map<String, dynamic>>.from(eventData['admins'] ?? []);
 
-      // Remove from admins and add to members
-      final updatedAdmins = event.admins
-          .where((a) => a.id != userId)
-          .map((a) => a.toMap())
-          .toList();
-      final updatedMembers = [
-        ...event.members.map((m) => m.toMap()),
-        admin.toMap(),
-      ];
+      // Find and remove from admins
+      final adminIndex = admins.indexWhere((a) => a['id'] == adminId);
+      if (adminIndex == -1) throw Exception('Admin not found');
 
-      await _firestore.collection(_collection).doc(eventId).update({
-        'admins': updatedAdmins,
-        'members': updatedMembers,
+      final adminData = admins.removeAt(adminIndex);
+
+      // Add to members
+      members.add(adminData);
+
+      // Update Firestore
+      await _firestore.collection('events').doc(eventId).update({
+        'members': members,
+        'admins': admins,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw Exception('Failed to demote admin to member: $e');
+      throw Exception('Failed to demote admin: $e');
     }
   }
 
