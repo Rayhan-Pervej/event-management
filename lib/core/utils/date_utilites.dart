@@ -25,7 +25,17 @@ class DateUtilites {
 
     if (difference.isNegative) {
       final daysPast = now.difference(deadline).inDays;
-      return 'Overdue by $daysPast day${daysPast == 1 ? '' : 's'}';
+      final hoursPast = now.difference(deadline).inHours;
+
+      if (daysPast == 0) {
+        if (hoursPast == 0) {
+          return 'Overdue (just now)';
+        } else {
+          return 'Overdue by ${hoursPast}h';
+        }
+      } else {
+        return 'Overdue by $daysPast day${daysPast == 1 ? '' : 's'}';
+      }
     } else if (difference.inDays == 0) {
       return 'Due today at ${_formatTime(deadline)}';
     } else if (difference.inDays == 1) {

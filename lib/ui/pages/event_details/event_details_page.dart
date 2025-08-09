@@ -106,7 +106,7 @@ class _EventDetailsPageState extends State<EventDetailsPage>
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.primaryContainer,
+      backgroundColor: colorScheme.surface,
       appBar: DefaultAppBar(
         title: 'Event Details',
         backgroundColor: colorScheme.surface,
@@ -187,15 +187,16 @@ class _EventDetailsPageState extends State<EventDetailsPage>
               Container(
                 color: colorScheme.surface,
                 child: TabBar(
+                  dividerColor: colorScheme.onSurface.withAlpha(60),
                   controller: _tabController,
                   labelColor: colorScheme.primary,
                   unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
                   indicatorColor: colorScheme.primary,
                   indicatorWeight: 2,
                   tabs: const [
-                    Tab(text: 'Description'),
-                    Tab(text: 'Members'),
                     Tab(text: 'Tasks'),
+                    Tab(text: 'Members'),
+                    Tab(text: 'Description'),
                   ],
                 ),
               ),
@@ -207,9 +208,10 @@ class _EventDetailsPageState extends State<EventDetailsPage>
                   children: [
                     RefreshIndicator(
                       onRefresh: _refreshData,
-                      child: EventDescriptionTab(
-                        event: event,
+                      child: EventTasksTab(
+                        eventId: widget.eventId,
                         isAdmin: isAdmin,
+                        currentUserId: widget.currentUserId,
                       ),
                     ),
                     RefreshIndicator(
@@ -223,10 +225,9 @@ class _EventDetailsPageState extends State<EventDetailsPage>
                     ),
                     RefreshIndicator(
                       onRefresh: _refreshData,
-                      child: EventTasksTab(
-                        eventId: widget.eventId,
+                      child: EventDescriptionTab(
+                        event: event,
                         isAdmin: isAdmin,
-                        currentUserId: widget.currentUserId,
                       ),
                     ),
                   ],

@@ -191,12 +191,8 @@ class EventDetailsProvider extends ChangeNotifier {
     if (_event == null) return;
 
     try {
-    
-
       // Update in Firestore first
       await _eventsRepository.demoteAdminToMember(eventId, adminId);
-
-     
 
       // Find the admin to demote
       final adminIndex = _event!.admins.indexWhere((a) => a.id == adminId);
@@ -214,18 +210,11 @@ class EventDetailsProvider extends ChangeNotifier {
       updatedAdmins.removeAt(adminIndex);
       updatedMembers.add(admin);
 
-    
-
       // Create updated event with new lists
       _event = _event!.copyWith(members: updatedMembers, admins: updatedAdmins);
 
-    
-
       notifyListeners();
-
-      
     } catch (e) {
-     
       // If there's an error, refresh from database to ensure consistency
       await refreshEvent(eventId);
       _setError('Failed to demote admin: ${e.toString()}');
@@ -255,24 +244,22 @@ class EventDetailsProvider extends ChangeNotifier {
     });
   }
 
+  Future<void> reloadTasks() async {
+    final currentEventId = _event?.id;
+    if (currentEventId != null) {
+      await loadTasks(currentEventId);
+    }
+  }
+
   // Complete a task
   Future<bool> completeTask(String taskId, String userId) async {
     try {
       final success = await _tasksRepository.completeTask(taskId, userId);
       if (success) {
-        // Update local task
-        final taskIndex = _tasks.indexWhere((task) => task.id == taskId);
-        if (taskIndex != -1) {
-          final updatedTask = _tasks[taskIndex].copyWith(
-            completedBy: [
-              ..._tasks[taskIndex].completedBy,
-              CompletionDetails(userId: userId, completedAt: DateTime.now()),
-            ],
-            status: 'completed',
-          );
-          _tasks[taskIndex] = updatedTask;
-          _sortTasks();
-          notifyListeners();
+        // Reload tasks from database to get the updated state
+        final currentEventId = _event?.id;
+        if (currentEventId != null) {
+          await loadTasks(currentEventId);
         }
       }
       return success;
@@ -310,12 +297,32 @@ class EventDetailsProvider extends ChangeNotifier {
     try {
       final success = await _tasksRepository.deleteTask(taskId);
       if (success) {
-        _tasks.removeWhere((task) => task.id == taskId);
-        notifyListeners();
+        // Reload tasks from database to get the updated state
+        final currentEventId = _event?.id;
+        if (currentEventId != null) {
+          await loadTasks(currentEventId);
+        }
       }
       return success;
     } catch (e) {
       _setError('Failed to delete task: ${e.toString()}');
+      return false;
+    }
+  }
+
+  Future<bool> uncompleteTask(String taskId, String userId) async {
+    try {
+      final success = await _tasksRepository.uncompleteTask(taskId, userId);
+      if (success) {
+        // Reload tasks from database to get the updated state
+        final currentEventId = _event?.id;
+        if (currentEventId != null) {
+          await loadTasks(currentEventId);
+        }
+      }
+      return success;
+    } catch (e) {
+      _setError('Failed to uncomplete task: ${e.toString()}');
       return false;
     }
   }

@@ -108,6 +108,44 @@ class TasksRepository {
     }
   }
 
+  Future<bool> uncompleteTask(String taskId, String userId) async {
+  try {
+    final taskDoc = await _firestore.collection(_collection).doc(taskId).get();
+    if (!taskDoc.exists) return false;
+
+    final task = TaskModel.fromFirestore(taskDoc);
+    
+    // Check if user has completed this task
+    if (!task.isCompletedByUser(userId)) {
+      return true; // User hasn't completed it, nothing to do
+    }
+
+    // Remove user from completed list
+    final updatedCompletedBy = task.completedBy
+        .where((completion) => completion.userId != userId)
+        .toList();
+
+    // Update status based on remaining completions
+    String newStatus;
+    if (updatedCompletedBy.isEmpty) {
+      newStatus = 'pending';
+    } else if (updatedCompletedBy.length < task.assignedToUsers.length) {
+      newStatus = 'in_progress';
+    } else {
+      newStatus = 'completed';
+    }
+
+    await _firestore.collection(_collection).doc(taskId).update({
+      'completedBy': updatedCompletedBy.map((c) => c.toMap()).toList(),
+      'status': newStatus,
+    });
+
+    return true;
+  } catch (e) {
+    throw Exception('Failed to uncomplete task: $e');
+  }
+}
+
   // Update Task Status
   Future<bool> updateTaskStatus(String taskId, String newStatus) async {
     try {

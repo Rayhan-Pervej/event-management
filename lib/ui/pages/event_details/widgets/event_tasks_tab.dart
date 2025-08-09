@@ -1,4 +1,6 @@
 // File: ui/widgets/event_tasks_tab.dart
+import 'package:event_management/core/utils/date_utilites.dart';
+import 'package:event_management/ui/pages/create_task/create_task_page.dart';
 import 'package:event_management/ui/widgets/app_dimensions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +22,8 @@ class EventTasksTab extends StatelessWidget {
     required this.currentUserId,
   });
 
+  // Fix: Update the EventTasksTab build method to ensure refresh works with small content
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -27,52 +31,73 @@ class EventTasksTab extends StatelessWidget {
 
     return Consumer<EventDetailsProvider>(
       builder: (context, provider, child) {
-        return Padding(
-          padding: const EdgeInsets.all(AppDimensions.space16),
-          child: Column(
-            children: [
-              // Add Task Button (Admin only)
-              if (isAdmin) ...[
-                DefaultButton(
-                  text: 'Add New Task',
-                  press: () {
-                    // Navigate to add task page
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Navigate to Add Task')),
-                    );
-                  },
-                  bgColor: colorScheme.primary,
-                ),
-                AppDimensions.h16,
-              ],
-
-              // Task Statistics
-              _buildTaskStats(context, provider),
-
-              AppDimensions.h16,
-
-              // Tasks List
-              Expanded(
-                child: provider.isLoadingTasks
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          color: colorScheme.primary,
-                        ),
-                      )
-                    : provider.tasks.isEmpty
-                    ? _buildEmptyState(context)
-                    : RefreshIndicator(
-                        onRefresh: () => provider.refresh(eventId),
-                        child: ListView.builder(
-                          itemCount: provider.tasks.length,
-                          itemBuilder: (context, index) {
-                            final task = provider.tasks[index];
-                            return _buildTaskCard(context, task, provider);
-                          },
-                        ),
-                      ),
+        return RefreshIndicator(
+          onRefresh: () async {
+            await provider.reloadTasks();
+          },
+          child: SingleChildScrollView(
+            // Add physics to ensure refresh indicator always works
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(AppDimensions.space16),
+            child: ConstrainedBox(
+              // Ensure content takes at least the screen height minus padding
+              constraints: BoxConstraints(
+                minHeight:
+                    MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    kToolbarHeight -
+                    100, // Approximate tab bar height + padding
               ),
-            ],
+              child: Column(
+                children: [
+                  // Add Task Button (Admin only)
+                  if (isAdmin) ...[
+                    DefaultButton(
+                      text: 'Add New Task',
+                      press: () async {
+                        // Navigate to create task page and wait for result
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => CreateTaskPage(
+                              eventId: eventId,
+                              currentUserId: currentUserId,
+                            ),
+                          ),
+                        );
+
+                        // If task was created successfully, refresh the tasks
+                        if (result == true) {
+                          provider.loadTasks(eventId);
+                        }
+                      },
+                      bgColor: colorScheme.primary,
+                    ),
+                    AppDimensions.h16,
+                  ],
+
+                  // Task Statistics
+                  _buildTaskStats(context, provider),
+
+                  AppDimensions.h16,
+
+                  // Tasks List
+                  provider.isLoadingTasks
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            color: colorScheme.primary,
+                          ),
+                        )
+                      : provider.tasks.isEmpty
+                      ? _buildEmptyState(context)
+                      : Column(
+                          children: provider.tasks.map((task) {
+                            return _buildTaskCard(context, task, provider);
+                          }).toList(),
+                        ),
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -86,7 +111,7 @@ class EventTasksTab extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: colorScheme.onPrimary,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
       ),
       child: Row(
@@ -169,7 +194,7 @@ class EventTasksTab extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppDimensions.space12),
       padding: const EdgeInsets.all(AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: colorScheme.onPrimary,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
         border: task.isOverdue ? Border.all(color: Colors.red, width: 1) : null,
       ),
@@ -179,34 +204,6 @@ class EventTasksTab extends StatelessWidget {
           // Task Header
           Row(
             children: [
-              // Checkbox for assigned users
-              if (isAssignedToUser && !task.isCompleted)
-                Checkbox(
-                  value: isCompletedByUser,
-                  onChanged: (value) async {
-                    if (value == true) {
-                      final success = await provider.completeTask(
-                        task.id,
-                        currentUserId,
-                      );
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Task completed!')),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Failed to complete task'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  activeColor: colorScheme.primary,
-                ),
-
-              if (isAssignedToUser && !task.isCompleted) AppDimensions.w8,
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,15 +228,108 @@ class EventTasksTab extends StatelessWidget {
                 ),
               ),
 
-              // Admin Actions
+              if (isAssignedToUser && !isAdmin) ...[
+                Checkbox(
+                  value: isCompletedByUser,
+                  onChanged: (value) async {
+                    if (value == true) {
+                      final success = await provider.completeTask(
+                        task.id,
+                        currentUserId,
+                      );
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Task completed!')),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Failed to complete task'),
+                          ),
+                        );
+                      }
+                    } else {
+                      // Handle uncomplete with confirmation
+                      final confirmed = await _showUncompleteConfirmation(
+                        context,
+                      );
+                      if (confirmed) {
+                        final success = await provider.uncompleteTask(
+                          task.id,
+                          currentUserId,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Task marked as incomplete'),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to update task'),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  activeColor: colorScheme.primary,
+                ),
+                AppDimensions.w8,
+              ],
+
+              // Three-dot menu (for admin only)
               if (isAdmin)
                 PopupMenuButton<String>(
+                  color: colorScheme.onPrimary,
                   icon: Icon(
                     Iconsax.more_outline,
                     color: colorScheme.onSurface.withOpacity(0.5),
                   ),
                   onSelected: (value) async {
                     switch (value) {
+                      case 'complete':
+                        final success = await provider.completeTask(
+                          task.id,
+                          currentUserId,
+                        );
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Task completed!')),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to complete task'),
+                            ),
+                          );
+                        }
+                        break;
+                      case 'uncomplete':
+                        final confirmed = await _showUncompleteConfirmation(
+                          context,
+                        );
+                        if (confirmed) {
+                          final success = await provider.uncompleteTask(
+                            task.id,
+                            currentUserId,
+                          );
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Task marked as incomplete'),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Failed to update task'),
+                              ),
+                            );
+                          }
+                        }
+                        break;
                       case 'edit':
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -262,28 +352,90 @@ class EventTasksTab extends StatelessWidget {
                         break;
                     }
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Iconsax.edit_outline),
-                          SizedBox(width: 8),
-                          Text('Edit'),
-                        ],
+                  itemBuilder: (context) {
+                    List<PopupMenuItem<String>> items = [];
+
+                    // Admin completion options
+                    if (!task.isCompleted) {
+                      items.add(
+                        PopupMenuItem(
+                          value: 'complete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Iconsax.tick_circle_outline,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Mark Complete',
+                                style: TextStyle(color: Colors.green),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Admin uncomplete option (if admin has completed it)
+                    if (task.isCompletedByUser(currentUserId)) {
+                      items.add(
+                        PopupMenuItem(
+                          value: 'uncomplete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Iconsax.close_circle_outline,
+                                color: Colors.orange,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Mark Incomplete',
+                                style: TextStyle(color: Colors.orange),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Divider if completion options exist
+                    if (items.isNotEmpty) {
+                      items.add(
+                        const PopupMenuItem(
+                          value: 'divider',
+                          enabled: false,
+                          child: Divider(height: 1),
+                        ),
+                      );
+                    }
+
+                    // Admin management options
+                    items.addAll([
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Iconsax.edit_outline),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Iconsax.trash_outline, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
-                        ],
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Iconsax.trash_outline, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ]);
+
+                    return items;
+                  },
                 ),
             ],
           ),
@@ -312,7 +464,7 @@ class EventTasksTab extends StatelessWidget {
               ),
               AppDimensions.w4,
               BuildText(
-                text: 'Due: ${_formatDate(task.deadline)}',
+                text: DateUtilites.formatDetailedDeadline(task.deadline),
                 fontSize: 12,
                 color: task.isOverdue
                     ? Colors.red
@@ -380,6 +532,47 @@ class EventTasksTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<bool> _showUncompleteConfirmation(BuildContext context) async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: colorScheme.surface,
+            title: BuildText(
+              text: 'Mark as Incomplete',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onSurface,
+            ),
+            content: BuildText(
+              text: 'Are you sure you want to mark this task as incomplete?',
+              fontSize: 14,
+              color: colorScheme.onSurface.withOpacity(0.7),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: BuildText(
+                  text: 'Cancel',
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const BuildText(
+                  text: 'Mark Incomplete',
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Widget _buildPriorityChip(BuildContext context, String priority) {
@@ -505,7 +698,7 @@ class EventTasksTab extends StatelessWidget {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: colorScheme.surface,
+            backgroundColor: colorScheme.onPrimary,
             title: BuildText(
               text: 'Delete Task',
               fontSize: 18,
