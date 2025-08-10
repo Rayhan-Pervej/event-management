@@ -1,6 +1,5 @@
 // File: services/notification_service.dart
 import 'dart:ui';
-
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,6 +40,9 @@ class NotificationService {
           _permissionsRequested = true;
         }
         
+        // Create notification channels for better compatibility on ALL Android phones
+        await _createNotificationChannels();
+        
         _isInitialized = true;
         print('Notifications initialized successfully');
       } else {
@@ -49,6 +51,121 @@ class NotificationService {
     } catch (e) {
       print('Error initializing notifications: $e');
       _isInitialized = false;
+    }
+  }
+
+  // Create notification channels with proper configuration for ALL Android devices
+  Future<void> _createNotificationChannels() async {
+    final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImplementation != null) {
+      // High importance channels for critical notifications
+      const highImportanceChannel = AndroidNotificationChannel(
+        'high_importance_channel',
+        'Critical Notifications',
+        description: 'High importance notifications that must be shown',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF2196F3),
+        showBadge: true,
+      );
+
+      const taskAssignmentChannel = AndroidNotificationChannel(
+        'task_assignments',
+        'Task Assignments',
+        description: 'Immediate notifications when you are assigned to tasks',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF2196F3),
+        showBadge: true,
+      );
+
+      const taskDueSoonChannel = AndroidNotificationChannel(
+        'task_due_soon',
+        'Task Due Soon',
+        description: 'Critical notifications for tasks due within an hour',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF9800),
+        showBadge: true,
+      );
+
+      const taskOverdueChannel = AndroidNotificationChannel(
+        'task_overdue',
+        'Tasks Overdue',
+        description: 'Critical notifications for overdue tasks',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFF44336),
+        showBadge: true,
+      );
+
+      const taskCompletionChannel = AndroidNotificationChannel(
+        'task_completions',
+        'Task Completions',
+        description: 'Notifications when tasks are completed',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF4CAF50),
+        showBadge: true,
+      );
+
+      const eventInvitationChannel = AndroidNotificationChannel(
+        'event_invitations',
+        'Event Invitations',
+        description: 'Notifications for event invitations',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF9C27B0),
+        showBadge: true,
+      );
+
+      const adminOverdueChannel = AndroidNotificationChannel(
+        'admin_overdue',
+        'Admin: Overdue Tasks',
+        description: 'Critical notifications for admins about overdue tasks',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFF44336),
+        showBadge: true,
+      );
+
+      const adminDueSoonChannel = AndroidNotificationChannel(
+        'admin_due_soon',
+        'Admin: Tasks Due Soon',
+        description: 'Notifications for admins about tasks due soon',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF9800),
+        showBadge: true,
+      );
+
+      // Create all channels
+      await androidImplementation.createNotificationChannel(highImportanceChannel);
+      await androidImplementation.createNotificationChannel(taskAssignmentChannel);
+      await androidImplementation.createNotificationChannel(taskDueSoonChannel);
+      await androidImplementation.createNotificationChannel(taskOverdueChannel);
+      await androidImplementation.createNotificationChannel(taskCompletionChannel);
+      await androidImplementation.createNotificationChannel(eventInvitationChannel);
+      await androidImplementation.createNotificationChannel(adminOverdueChannel);
+      await androidImplementation.createNotificationChannel(adminDueSoonChannel);
+
+      print('All notification channels created successfully');
     }
   }
 
@@ -85,7 +202,7 @@ class NotificationService {
 
   // MEMBER NOTIFICATIONS
 
-  // Show event invitation notification - ONCE ONLY
+  // Show event invitation notification - ONCE ONLY (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showEventInvitationNotification({
     required String eventTitle,
     required String invitedBy,
@@ -114,6 +231,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '🎉 Event Invitation',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFF9C27B0),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'New event invitation received',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -129,14 +263,15 @@ class NotificationService {
     );
 
     final role = isAdmin ? 'admin' : 'member';
+    final body = '$invitedBy added you as $role to "$eventTitle"';
     
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '🎉 Event Invitation',
-        '$invitedBy added you as $role to "$eventTitle"',
+        '🎉 Event Invitation', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'event:$eventId',
       );
@@ -150,7 +285,7 @@ class NotificationService {
     }
   }
 
-  // Show task assignment notification - ONCE ONLY
+  // Show task assignment notification - ONCE ONLY (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showTaskAssignedNotification({
     required String taskTitle,
     required String eventTitle,
@@ -178,6 +313,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '📋 New Task Assigned',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFF2196F3),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'New task assignment received',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -192,13 +344,15 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    final body = 'You have been assigned to "$taskTitle" in $eventTitle';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '📋 New Task Assigned',
-        'You have been assigned to "$taskTitle" in $eventTitle',
+        '📋 New Task Assigned', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'task:$taskId',
       );
@@ -212,7 +366,7 @@ class NotificationService {
     }
   }
 
-  // Show task due soon notification - EVERY 1 MINUTE
+  // Show task due soon notification - EVERY 1 MINUTE (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showTaskDueSoonNotification({
     required String taskTitle,
     required String eventTitle,
@@ -238,6 +392,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '⏰ Task Due Soon!',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFFFF9800),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Task due soon notification',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -252,13 +423,15 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    final body = '"$taskTitle" in $eventTitle is due in $minutesLeft minutes';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '⏰ Task Due Soon!',
-        '"$taskTitle" in $eventTitle is due in $minutesLeft minutes',
+        '⏰ Task Due Soon!', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'task:$taskId',
       );
@@ -270,7 +443,7 @@ class NotificationService {
     }
   }
 
-  // Show task overdue notification - EVERY 1 MINUTE
+  // Show task overdue notification - EVERY 1 MINUTE (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showTaskOverdueNotification({
     required String taskTitle,
     required String eventTitle,
@@ -293,6 +466,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '🚨 Task Overdue!',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFFF44336),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Task overdue notification',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -311,13 +501,15 @@ class NotificationService {
         ? '$hoursOverdue hours overdue' 
         : '${(hoursOverdue / 24).floor()} days overdue';
 
+    final body = '"$taskTitle" in $eventTitle is $overdueText';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '🚨 Task Overdue!',
-        '"$taskTitle" in $eventTitle is $overdueText',
+        '🚨 Task Overdue!', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'task:$taskId',
       );
@@ -331,7 +523,7 @@ class NotificationService {
 
   // ADMIN NOTIFICATIONS
 
-  // Show task completion notification - SHOW FIRST NAME
+  // Show task completion notification - SHOW FIRST NAME (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showTaskCompletedNotification({
     required String taskTitle,
     required String completedByFirstName, // Changed to first name
@@ -354,6 +546,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '✅ Task Completed',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFF4CAF50),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Task completed notification',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -368,13 +577,15 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    final body = '$completedByFirstName completed "$taskTitle" in $eventTitle';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '✅ Task Completed',
-        '$completedByFirstName completed "$taskTitle" in $eventTitle',
+        '✅ Task Completed', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'task:$taskId',
       );
@@ -386,7 +597,7 @@ class NotificationService {
     }
   }
 
-  // Show admin overdue notification - EVERY 1 MINUTE
+  // Show admin overdue notification - EVERY 1 MINUTE (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showAdminTaskOverdueNotification({
     required String taskTitle,
     required String eventTitle,
@@ -410,6 +621,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '🚨 Admin Alert: Task Overdue',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFFF44336),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Admin overdue task notification',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -432,13 +660,15 @@ class NotificationService {
         ? 'assigned to $assignedToCount people' 
         : 'assigned to 1 person';
 
+    final body = '"$taskTitle" in $eventTitle ($assignedText) is $overdueText';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '🚨 Admin Alert: Task Overdue',
-        '"$taskTitle" in $eventTitle ($assignedText) is $overdueText',
+        '🚨 Admin Alert: Task Overdue', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'admin_task:$taskId',
       );
@@ -450,7 +680,7 @@ class NotificationService {
     }
   }
 
-  // Show admin due soon notification - EVERY 1 MINUTE
+  // Show admin due soon notification - EVERY 1 MINUTE (UNIVERSAL FOR ALL ANDROID PHONES)
   Future<void> showAdminTaskDueSoonNotification({
     required String taskTitle,
     required String eventTitle,
@@ -477,6 +707,23 @@ class NotificationService {
       ongoing: false,
       channelShowBadge: true,
       showWhen: true,
+      when: null,
+      usesChronometer: false,
+      fullScreenIntent: false,
+      // UNIVERSAL FIX: Force show custom content on ALL Android phones
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '⏰ Admin Alert: Task Due Soon',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFFFF9800),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Admin due soon task notification',
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -495,13 +742,15 @@ class NotificationService {
         ? 'assigned to $assignedToCount people' 
         : 'assigned to 1 person';
 
+    final body = '"$taskTitle" in $eventTitle ($assignedText) is due in $minutesLeft minutes';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '⏰ Admin Alert: Task Due Soon',
-        '"$taskTitle" in $eventTitle ($assignedText) is due in $minutesLeft minutes',
+        '⏰ Admin Alert: Task Due Soon', // This will show on ALL Android phones
+        body, // This will show on ALL Android phones
         notificationDetails,
         payload: 'admin_task:$taskId',
       );

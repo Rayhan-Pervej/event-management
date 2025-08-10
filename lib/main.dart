@@ -94,9 +94,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notificationTimer?.cancel();
-    if (_notificationsInitialized) {
-      NotificationManager().dispose();
-    }
+    // Don't dispose NotificationManager here - let it run in background
     super.dispose();
   }
 
@@ -104,14 +102,33 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
+    print('App lifecycle state changed to: $state');
+
     switch (state) {
       case AppLifecycleState.resumed:
+        print('App resumed - ensuring notifications are active');
         NotificationManager().setBackgroundState(false);
+        // Restart timer if it was cancelled
+        if (_notificationsInitialized && (_notificationTimer == null || !_notificationTimer!.isActive)) {
+          _startPeriodicNotifications();
+        }
         break;
       case AppLifecycleState.paused:
+        print('App paused - notifications continuing in background');
         NotificationManager().setBackgroundState(true);
+        // Keep timer running even when paused
         break;
-      default:
+      case AppLifecycleState.inactive:
+        print('App inactive - maintaining notification system');
+        // Don't stop anything - keep running
+        break;
+      case AppLifecycleState.detached:
+        print('App detached - notification system should continue');
+        // Don't stop anything - keep running
+        break;
+      case AppLifecycleState.hidden:
+        print('App hidden - maintaining background notifications');
+        NotificationManager().setBackgroundState(true);
         break;
     }
   }
@@ -168,21 +185,27 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     // Check every 1 minute for overdue and due soon tasks
     _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (_notificationsInitialized) {
+        print('Periodic notification check running...');
         NotificationManager().checkTaskReminders();
+      } else {
+        print('Notifications not initialized, skipping check');
       }
     });
     
     // Also check immediately
     if (_notificationsInitialized) {
+      print('Running immediate notification check...');
       NotificationManager().checkTaskReminders();
     }
   }
 
   Future<void> _disposeNotifications() async {
     try {
+      // Only cancel timer, don't dispose NotificationManager
+      // This allows notifications to continue even when user logs out
       _notificationTimer?.cancel();
       _notificationTimer = null;
-      await NotificationManager().dispose();
+      print('Notification timer cancelled, but NotificationManager preserved for background operation');
     } catch (e) {
       print('Error disposing notifications: $e');
     }
@@ -190,21 +213,33 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasData) {
-          return NavigationPage();
-        } else {
-          return Login();
-        }
+    return PopScope(
+      canPop: false, // Prevent back button from killing the app
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        // Handle back button press - move app to background instead of killing
+        print('Back button pressed - moving app to background while preserving notifications');
+        
+        // Move app to background but keep notifications running
+        await SystemChannels.platform.invokeMethod('SystemNavigator.pop');
       },
+      child: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.hasData) {
+            return NavigationPage();
+          } else {
+            return Login();
+          }
+        },
+      ),
     );
   }
 }
