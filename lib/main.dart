@@ -9,7 +9,7 @@ import 'package:event_management/providers/navigation_provider.dart';
 import 'package:event_management/providers/sign_up_provider.dart';
 import 'package:event_management/providers/manage_team_provider.dart';
 import 'package:event_management/service/notification_manager.dart';
-import 'package:event_management/service/notification_service.dart';
+import 'package:event_management/service/notification_service.dart'; // ADD THIS LINE
 
 import 'package:event_management/ui/pages/auth/login_page.dart';
 import 'package:event_management/ui/pages/navigation.dart';
@@ -78,16 +78,19 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   Timer? _notificationTimer;
   bool _notificationsInitialized = false;
+  
+  // Platform channel for moving app to background
+  static const platform = MethodChannel('app.channel.shared.data');
 
   @override
   void initState() {
     super.initState();
-
+    
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeNotificationService();
     });
-
+    
     FirebaseAuth.instance.authStateChanges().listen(_handleAuthStateChange);
   }
 
@@ -97,6 +100,16 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     _notificationTimer?.cancel();
     // Don't dispose NotificationManager here - let it run in background
     super.dispose();
+  }
+
+  // Method to move app to background using native Android method
+  Future<void> moveAppToBackground() async {
+    try {
+      await platform.invokeMethod('moveToBackground');
+      print('App moved to background successfully');
+    } on PlatformException catch (e) {
+      print("Failed to move app to background: '${e.message}'.");
+    }
   }
 
   @override
@@ -110,8 +123,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         print('App resumed - ensuring notifications are active');
         NotificationManager().setBackgroundState(false);
         // Restart timer if it was cancelled
-        if (_notificationsInitialized &&
-            (_notificationTimer == null || !_notificationTimer!.isActive)) {
+        if (_notificationsInitialized && (_notificationTimer == null || !_notificationTimer!.isActive)) {
           _startPeriodicNotifications();
         }
         break;
@@ -173,10 +185,10 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     try {
       // Initialize notification manager
       await NotificationManager().initialize(userId);
-
+      
       // Start periodic notification checks every 1 minute
       _startPeriodicNotifications();
-
+      
       print('Notification system initialized for user: $userId');
     } catch (e) {
       print('Error initializing notifications: $e');
@@ -185,7 +197,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   void _startPeriodicNotifications() {
     _notificationTimer?.cancel();
-
+    
     // Check every 1 minute for overdue and due soon tasks
     _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (_notificationsInitialized) {
@@ -195,7 +207,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         print('Notifications not initialized, skipping check');
       }
     });
-
+    
     // Also check immediately
     if (_notificationsInitialized) {
       print('Running immediate notification check...');
@@ -209,9 +221,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
       // This allows notifications to continue even when user logs out
       _notificationTimer?.cancel();
       _notificationTimer = null;
-      print(
-        'Notification timer cancelled, but NotificationManager preserved for background operation',
-      );
+      print('Notification timer cancelled, but NotificationManager preserved for background operation');
     } catch (e) {
       print('Error disposing notifications: $e');
     }
@@ -219,18 +229,16 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false, // Prevent back button from killing the app
-      onPopInvoked: (didPop) async {
-        if (didPop) return;
-
-        // Handle back button press - move app to background instead of killing
-        print(
-          'Back button pressed - moving app to background while preserving notifications',
-        );
-
-        // Move app to background but keep notifications running
-        await SystemChannels.platform.invokeMethod('SystemNavigator.pop');
+    return WillPopScope(
+      onWillPop: () async {
+        // Handle back button press - move app to background using native Android method
+        print('Back button pressed - moving app to background while preserving notifications');
+        
+        // Use platform channel to call Android's moveTaskToBack(true)
+        await moveAppToBackground();
+        
+        // Return false to prevent default back button behavior (killing app)
+        return false;
       },
       child: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),

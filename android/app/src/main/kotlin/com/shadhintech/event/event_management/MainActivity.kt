@@ -16,11 +16,25 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val FOREGROUND_CHANNEL = "foreground_service"
     private val BATTERY_CHANNEL = "battery_optimization"
+    private val BACKGROUND_CHANNEL = "app.channel.shared.data" // NEW: Added for back button
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
-        // Foreground service channel
+        // NEW: Back button platform channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKGROUND_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "moveToBackground" -> {
+                    // Move app to background without killing it
+                    // This is equivalent to pressing the home button
+                    moveTaskToBack(true)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        
+        // Foreground service channel (EXISTING - KEEP AS IS)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FOREGROUND_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startForegroundService" -> {
@@ -37,7 +51,7 @@ class MainActivity: FlutterActivity() {
             }
         }
         
-        // Battery optimization channel (keep existing)
+        // Battery optimization channel (EXISTING - KEEP AS IS)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isIgnoringBatteryOptimizations" -> {
@@ -108,7 +122,7 @@ class MainActivity: FlutterActivity() {
     }
 }
 
-// Foreground Service Class
+// Foreground Service Class (EXISTING - KEEP AS IS)
 class NotificationForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "event_management_foreground"
