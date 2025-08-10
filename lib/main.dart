@@ -9,6 +9,7 @@ import 'package:event_management/providers/navigation_provider.dart';
 import 'package:event_management/providers/sign_up_provider.dart';
 import 'package:event_management/providers/manage_team_provider.dart';
 import 'package:event_management/service/notification_manager.dart';
+import 'package:event_management/service/notification_service.dart';
 
 import 'package:event_management/ui/pages/auth/login_page.dart';
 import 'package:event_management/ui/pages/navigation.dart';
@@ -81,12 +82,12 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeNotificationService();
     });
-    
+
     FirebaseAuth.instance.authStateChanges().listen(_handleAuthStateChange);
   }
 
@@ -109,7 +110,8 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         print('App resumed - ensuring notifications are active');
         NotificationManager().setBackgroundState(false);
         // Restart timer if it was cancelled
-        if (_notificationsInitialized && (_notificationTimer == null || !_notificationTimer!.isActive)) {
+        if (_notificationsInitialized &&
+            (_notificationTimer == null || !_notificationTimer!.isActive)) {
           _startPeriodicNotifications();
         }
         break;
@@ -135,8 +137,10 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   Future<void> _initializeNotificationService() async {
     try {
+      // Actually initialize the NotificationService
+      await NotificationService().initialize();
       _notificationsInitialized = true;
-      print('Notification service ready');
+      print('Notification service initialized successfully');
     } catch (e) {
       _notificationsInitialized = false;
       print('Failed to initialize notifications: $e');
@@ -169,10 +173,10 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     try {
       // Initialize notification manager
       await NotificationManager().initialize(userId);
-      
+
       // Start periodic notification checks every 1 minute
       _startPeriodicNotifications();
-      
+
       print('Notification system initialized for user: $userId');
     } catch (e) {
       print('Error initializing notifications: $e');
@@ -181,7 +185,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   void _startPeriodicNotifications() {
     _notificationTimer?.cancel();
-    
+
     // Check every 1 minute for overdue and due soon tasks
     _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (_notificationsInitialized) {
@@ -191,7 +195,7 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         print('Notifications not initialized, skipping check');
       }
     });
-    
+
     // Also check immediately
     if (_notificationsInitialized) {
       print('Running immediate notification check...');
@@ -205,7 +209,9 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
       // This allows notifications to continue even when user logs out
       _notificationTimer?.cancel();
       _notificationTimer = null;
-      print('Notification timer cancelled, but NotificationManager preserved for background operation');
+      print(
+        'Notification timer cancelled, but NotificationManager preserved for background operation',
+      );
     } catch (e) {
       print('Error disposing notifications: $e');
     }
@@ -217,10 +223,12 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
       canPop: false, // Prevent back button from killing the app
       onPopInvoked: (didPop) async {
         if (didPop) return;
-        
+
         // Handle back button press - move app to background instead of killing
-        print('Back button pressed - moving app to background while preserving notifications');
-        
+        print(
+          'Back button pressed - moving app to background while preserving notifications',
+        );
+
         // Move app to background but keep notifications running
         await SystemChannels.platform.invokeMethod('SystemNavigator.pop');
       },
