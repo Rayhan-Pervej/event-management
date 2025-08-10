@@ -9,8 +9,7 @@ import 'package:event_management/providers/navigation_provider.dart';
 import 'package:event_management/providers/sign_up_provider.dart';
 import 'package:event_management/providers/manage_team_provider.dart';
 import 'package:event_management/service/notification_manager.dart';
-import 'package:event_management/service/notification_service.dart';
-import 'package:event_management/service/background_service.dart';
+
 import 'package:event_management/ui/pages/auth/login_page.dart';
 import 'package:event_management/ui/pages/navigation.dart';
 
@@ -27,9 +26,6 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Initialize background service
-  await BackgroundNotificationService.initialize();
 
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
 
@@ -79,7 +75,7 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
-  Timer? _reminderTimer;
+  Timer? _notificationTimer;
   bool _notificationsInitialized = false;
 
   @override
@@ -97,36 +93,36 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _reminderTimer?.cancel();
+    _notificationTimer?.cancel();
     if (_notificationsInitialized) {
       NotificationManager().dispose();
     }
     super.dispose();
   }
 
-@override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  super.didChangeAppLifecycleState(state);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
 
-  switch (state) {
-    case AppLifecycleState.resumed:
-      NotificationManager().setBackgroundState(false);
-      // Remove the aggressive restart - let the health check handle it
-      break;
-    case AppLifecycleState.paused:
-      NotificationManager().setBackgroundState(true);
-      break;
-    default:
-      break;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        NotificationManager().setBackgroundState(false);
+        break;
+      case AppLifecycleState.paused:
+        NotificationManager().setBackgroundState(true);
+        break;
+      default:
+        break;
+    }
   }
-}
 
   Future<void> _initializeNotificationService() async {
     try {
-      await NotificationService().initialize();
       _notificationsInitialized = true;
+      print('Notification service ready');
     } catch (e) {
       _notificationsInitialized = false;
+      print('Failed to initialize notifications: $e');
     }
   }
 
@@ -154,35 +150,41 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_notificationsInitialized) return;
 
     try {
+      // Initialize notification manager
       await NotificationManager().initialize(userId);
-      await BackgroundNotificationService.startBackgroundTask(userId);
-      _scheduleDailyReminders();
+      
+      // Start periodic notification checks every 1 minute
+      _startPeriodicNotifications();
+      
+      print('Notification system initialized for user: $userId');
     } catch (e) {
-      // Handle error silently in production
+      print('Error initializing notifications: $e');
     }
   }
 
-  void _scheduleDailyReminders() {
-    _reminderTimer?.cancel();
-    _reminderTimer = Timer.periodic(const Duration(hours: 6), (timer) {
+  void _startPeriodicNotifications() {
+    _notificationTimer?.cancel();
+    
+    // Check every 1 minute for overdue and due soon tasks
+    _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (_notificationsInitialized) {
-        NotificationManager().scheduleTaskReminders();
+        NotificationManager().checkTaskReminders();
       }
     });
     
+    // Also check immediately
     if (_notificationsInitialized) {
-      NotificationManager().scheduleTaskReminders();
+      NotificationManager().checkTaskReminders();
     }
   }
 
   Future<void> _disposeNotifications() async {
     try {
-      _reminderTimer?.cancel();
-      _reminderTimer = null;
-      await BackgroundNotificationService.stopBackgroundTask();
+      _notificationTimer?.cancel();
+      _notificationTimer = null;
       await NotificationManager().dispose();
     } catch (e) {
-      // Handle error silently in production
+      print('Error disposing notifications: $e');
     }
   }
 

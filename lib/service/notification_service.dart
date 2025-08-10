@@ -43,9 +43,6 @@ class NotificationService {
         
         _isInitialized = true;
         print('Notifications initialized successfully');
-        
-        // Request battery optimization exemption for unlimited notifications
-        await _requestBatteryOptimizationExemption();
       } else {
         print('Failed to initialize notifications');
       }
@@ -55,31 +52,13 @@ class NotificationService {
     }
   }
 
-  // Request battery optimization exemption for unlimited notifications
-  Future<void> _requestBatteryOptimizationExemption() async {
-    try {
-      // Note: You'll need to implement this using platform channels
-      // This is crucial for ensuring ALL notifications are delivered
-      print('Requesting battery optimization exemption for unlimited notifications');
-      
-      // For now, we'll just log this - you can implement the actual request later
-      // BatteryOptimizationService.requestIgnoreBatteryOptimizations();
-    } catch (e) {
-      print('Error requesting battery optimization exemption: $e');
-    }
-  }
-
-  // AGGRESSIVE: Request all possible notification permissions
+  // Request notification permissions
   Future<void> _requestPermissions() async {
     try {
       final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       if (androidImplementation != null) {
-        // Request basic notification permission
         final granted = await androidImplementation.requestNotificationsPermission();
         print('Android notification permission granted: $granted');
-        
-        // Request all notification categories to ensure maximum delivery
-        // This tells Android we want to send all types of notifications
       }
 
       final iosImplementation = _notifications.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
@@ -88,7 +67,6 @@ class NotificationService {
           alert: true,
           badge: true,
           sound: true,
-          provisional: true, // This allows unlimited notifications on iOS
         );
         print('iOS notification permission granted: $granted');
       }
@@ -105,9 +83,74 @@ class NotificationService {
     }
   }
 
-  // MEMBER NOTIFICATIONS - UNLIMITED
+  // MEMBER NOTIFICATIONS
 
-  // Show task assignment notification (for members) - NO LIMITS
+  // Show event invitation notification - ONCE ONLY
+  Future<void> showEventInvitationNotification({
+    required String eventTitle,
+    required String invitedBy,
+    required String eventId,
+    required bool isAdmin,
+  }) async {
+    if (!_isInitialized) return;
+
+    // Check if already notified for this event
+    if (await _wasAlreadyNotified('event_invitation', eventId)) {
+      print('Already notified for event invitation: $eventId');
+      return;
+    }
+
+    const androidDetails = AndroidNotificationDetails(
+      'event_invitations',
+      'Event Invitations',
+      channelDescription: 'Notifications for event invitations',
+      importance: Importance.max,
+      priority: Priority.max,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+      color: Color(0xFF9C27B0),
+      autoCancel: false,
+      ongoing: false,
+      channelShowBadge: true,
+      showWhen: true,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final role = isAdmin ? 'admin' : 'member';
+    
+    try {
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
+      
+      await _notifications.show(
+        uniqueId,
+        '🎉 Event Invitation',
+        '$invitedBy added you as $role to "$eventTitle"',
+        notificationDetails,
+        payload: 'event:$eventId',
+      );
+      
+      // Mark as notified
+      await _markAsNotified('event_invitation', eventId);
+      await _logNotification('Event Invitation', eventTitle, 'N/A');
+      print('Event invitation notification sent: $eventTitle (ID: $uniqueId)');
+    } catch (e) {
+      print('Error sending event invitation notification: $e');
+    }
+  }
+
+  // Show task assignment notification - ONCE ONLY
   Future<void> showTaskAssignedNotification({
     required String taskTitle,
     required String eventTitle,
@@ -115,29 +158,32 @@ class NotificationService {
   }) async {
     if (!_isInitialized) return;
 
-    // HIGH PRIORITY: Ensures notification is delivered
+    // Check if already notified for this task assignment
+    if (await _wasAlreadyNotified('task_assignment', taskId)) {
+      print('Already notified for task assignment: $taskId');
+      return;
+    }
+
     const androidDetails = AndroidNotificationDetails(
       'task_assignments',
       'Task Assignments',
       channelDescription: 'Immediate notifications when you are assigned to tasks',
-      importance: Importance.max, // Maximum importance
-      priority: Priority.max,     // Maximum priority
+      importance: Importance.max,
+      priority: Priority.max,
       icon: '@mipmap/ic_launcher',
       enableVibration: true,
       playSound: true,
       color: Color(0xFF2196F3),
-      autoCancel: false,          // Don't auto-dismiss
-      ongoing: false,             // Not persistent
-      channelShowBadge: true,     // Show app badge
-      showWhen: true,             // Show timestamp
-      when: null,                 // Use current time
+      autoCancel: false,
+      ongoing: false,
+      channelShowBadge: true,
+      showWhen: true,
     );
 
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
-      badgeNumber: null,
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
 
@@ -147,7 +193,6 @@ class NotificationService {
     );
 
     try {
-      // Use unique ID to prevent any notification from being overwritten
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
@@ -158,7 +203,8 @@ class NotificationService {
         payload: 'task:$taskId',
       );
       
-      // Log for tracking
+      // Mark as notified
+      await _markAsNotified('task_assignment', taskId);
       await _logNotification('Task Assignment', taskTitle, eventTitle);
       print('Task assignment notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -166,7 +212,7 @@ class NotificationService {
     }
   }
 
-  // Show task due soon notification - NO LIMITS
+  // Show task due soon notification - EVERY 1 MINUTE
   Future<void> showTaskDueSoonNotification({
     required String taskTitle,
     required String eventTitle,
@@ -174,6 +220,9 @@ class NotificationService {
     required int minutesLeft,
   }) async {
     if (!_isInitialized) return;
+
+    // TODO: Change time interval here - currently within 1 hour (60 minutes)
+    if (minutesLeft > 60) return; // Only notify if within 1 hour
 
     const androidDetails = AndroidNotificationDetails(
       'task_due_soon',
@@ -195,7 +244,7 @@ class NotificationService {
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
-      interruptionLevel: InterruptionLevel.critical, // Critical level for due soon
+      interruptionLevel: InterruptionLevel.critical,
     );
 
     const notificationDetails = NotificationDetails(
@@ -221,7 +270,7 @@ class NotificationService {
     }
   }
 
-  // Show task overdue notification - NO LIMITS
+  // Show task overdue notification - EVERY 1 MINUTE
   Future<void> showTaskOverdueNotification({
     required String taskTitle,
     required String eventTitle,
@@ -280,12 +329,12 @@ class NotificationService {
     }
   }
 
-  // ADMIN NOTIFICATIONS - UNLIMITED
+  // ADMIN NOTIFICATIONS
 
-  // Show task completion notification - NO LIMITS
+  // Show task completion notification - SHOW FIRST NAME
   Future<void> showTaskCompletedNotification({
     required String taskTitle,
-    required String completedBy,
+    required String completedByFirstName, // Changed to first name
     required String eventTitle,
     required String taskId,
   }) async {
@@ -325,7 +374,7 @@ class NotificationService {
       await _notifications.show(
         uniqueId,
         '✅ Task Completed',
-        '$completedBy completed "$taskTitle" in $eventTitle',
+        '$completedByFirstName completed "$taskTitle" in $eventTitle',
         notificationDetails,
         payload: 'task:$taskId',
       );
@@ -337,7 +386,7 @@ class NotificationService {
     }
   }
 
-  // Show admin overdue notification - NO LIMITS
+  // Show admin overdue notification - EVERY 1 MINUTE
   Future<void> showAdminTaskOverdueNotification({
     required String taskTitle,
     required String eventTitle,
@@ -401,25 +450,29 @@ class NotificationService {
     }
   }
 
-  // Show event invitation notification - NO LIMITS
-  Future<void> showEventInvitationNotification({
+  // Show admin due soon notification - EVERY 1 MINUTE
+  Future<void> showAdminTaskDueSoonNotification({
+    required String taskTitle,
     required String eventTitle,
-    required String invitedBy,
-    required String eventId,
-    required bool isAdmin,
+    required String taskId,
+    required int assignedToCount,
+    required int minutesLeft,
   }) async {
     if (!_isInitialized) return;
 
+    // TODO: Change time interval here - currently within 1 hour (60 minutes)
+    if (minutesLeft > 60) return; // Only notify if within 1 hour
+
     const androidDetails = AndroidNotificationDetails(
-      'event_invitations',
-      'Event Invitations',
-      channelDescription: 'Notifications for event invitations',
+      'admin_due_soon',
+      'Admin: Tasks Due Soon',
+      channelDescription: 'Notifications for admins about tasks due soon',
       importance: Importance.max,
       priority: Priority.max,
       icon: '@mipmap/ic_launcher',
       enableVibration: true,
       playSound: true,
-      color: Color(0xFF9C27B0),
+      color: Color(0xFFFF9800),
       autoCancel: false,
       ongoing: false,
       channelShowBadge: true,
@@ -438,23 +491,46 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    final role = isAdmin ? 'admin' : 'member';
-    
+    String assignedText = assignedToCount > 1 
+        ? 'assigned to $assignedToCount people' 
+        : 'assigned to 1 person';
+
     try {
       final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
       
       await _notifications.show(
         uniqueId,
-        '🎉 Event Invitation',
-        '$invitedBy added you as $role to "$eventTitle"',
+        '⏰ Admin Alert: Task Due Soon',
+        '"$taskTitle" in $eventTitle ($assignedText) is due in $minutesLeft minutes',
         notificationDetails,
-        payload: 'event:$eventId',
+        payload: 'admin_task:$taskId',
       );
       
-      await _logNotification('Event Invitation', eventTitle, 'N/A');
-      print('Event invitation notification sent: $eventTitle (ID: $uniqueId)');
+      await _logNotification('Admin Due Soon Alert', taskTitle, eventTitle);
+      print('Admin due soon notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
-      print('Error sending event invitation notification: $e');
+      print('Error sending admin due soon notification: $e');
+    }
+  }
+
+  // Helper methods for tracking "once only" notifications
+  Future<bool> _wasAlreadyNotified(String type, String id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'notified_${type}_$id';
+      return prefs.getBool(key) ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _markAsNotified(String type, String id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'notified_${type}_$id';
+      await prefs.setBool(key, true);
+    } catch (e) {
+      print('Error marking as notified: $e');
     }
   }
 
@@ -474,25 +550,6 @@ class NotificationService {
       await prefs.setStringList('notification_logs', logs);
     } catch (e) {
       print('Error logging notification: $e');
-    }
-  }
-
-  // Get notification statistics
-  Future<Map<String, int>> getNotificationStats() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final logs = prefs.getStringList('notification_logs') ?? [];
-      
-      final stats = <String, int>{};
-      for (final log in logs) {
-        final type = log.split(' - ')[1].split(':')[0];
-        stats[type] = (stats[type] ?? 0) + 1;
-      }
-      
-      return stats;
-    } catch (e) {
-      print('Error getting notification stats: $e');
-      return {};
     }
   }
 
@@ -526,7 +583,7 @@ class NotificationService {
       await _notifications.show(
         999,
         '🎉 Notifications Ready!',
-        'Your unlimited notification system is working correctly',
+        'Your notification system is working correctly',
         notificationDetails,
         payload: 'test',
       );
@@ -555,17 +612,6 @@ class NotificationService {
     } catch (e) {
       print('Error checking notification permissions: $e');
       return true;
-    }
-  }
-
-  Future<bool> requestPermissionsManually() async {
-    try {
-      await _requestPermissions();
-      _permissionsRequested = true;
-      return await areNotificationsEnabled();
-    } catch (e) {
-      print('Error requesting permissions manually: $e');
-      return false;
     }
   }
 
