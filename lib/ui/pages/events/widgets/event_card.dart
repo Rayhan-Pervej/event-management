@@ -10,11 +10,7 @@ class EventCard extends StatelessWidget {
   final EventModel event;
   final VoidCallback onTap;
 
-  const EventCard({
-    super.key,
-    required this.event,
-    required this.onTap,
-  });
+  const EventCard({super.key, required this.event, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +19,8 @@ class EventCard extends StatelessWidget {
 
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      color: colorScheme.onPrimary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -49,9 +44,9 @@ class EventCard extends StatelessWidget {
                   EventStatusChip(status: event.status),
                 ],
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               // Location
               Row(
                 children: [
@@ -71,9 +66,9 @@ class EventCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 8),
-              
+
               // Date Range
               Row(
                 children: [
@@ -90,9 +85,9 @@ class EventCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               // Footer Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

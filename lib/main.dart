@@ -4,10 +4,12 @@ import 'package:event_management/providers/create_event_proivder.dart';
 import 'package:event_management/providers/create_task_provider.dart';
 import 'package:event_management/providers/event_details_provider.dart';
 import 'package:event_management/providers/events_provider.dart';
+import 'package:event_management/providers/home_provider.dart';
 import 'package:event_management/providers/login_provider.dart';
 import 'package:event_management/providers/navigation_provider.dart';
 import 'package:event_management/providers/sign_up_provider.dart';
 import 'package:event_management/providers/manage_team_provider.dart';
+import 'package:event_management/providers/user_tasks_provider.dart';
 import 'package:event_management/service/notification_manager.dart';
 import 'package:event_management/service/notification_service.dart'; // ADD THIS LINE
 
@@ -33,8 +35,10 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => HomeProvider()),
         ChangeNotifierProvider(create: (_) => SignUpProvider()),
         ChangeNotifierProvider(create: (_) => LoginProvider()),
+        ChangeNotifierProvider(create: (_) => UserTasksProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => EventsProvider()),
         ChangeNotifierProvider(create: (_) => CreateEventProvider()),

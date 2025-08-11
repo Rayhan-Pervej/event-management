@@ -1,4 +1,6 @@
+import 'package:event_management/providers/home_provider.dart';
 import 'package:event_management/providers/navigation_provider.dart';
+import 'package:event_management/providers/user_tasks_provider.dart';
 import 'package:event_management/ui/pages/events/events_page.dart';
 import 'package:event_management/ui/pages/home/home_page.dart';
 import 'package:event_management/ui/pages/more/more_page.dart';
@@ -16,11 +18,17 @@ class NavigationPage extends StatelessWidget {
         return Scaffold(
           body: IndexedStack(
             index: navigationProvider.currentIndex,
-            children: const [
-              HomePage(pageName: "Home"),
-              EventsPage(),
-              TasksPage(),
-              MorePage(),
+            children: [
+              ChangeNotifierProvider(
+                create: (context) => HomeProvider(),
+                child: const HomePage(),
+              ),
+              const EventsPage(),
+              ChangeNotifierProvider(
+                create: (context) => UserTasksProvider(),
+                child: const UserTasksPage(),
+              ),
+              const MorePage(),
             ],
           ),
           bottomNavigationBar: Container(

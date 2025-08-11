@@ -17,6 +17,8 @@ class EventFilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -31,6 +33,7 @@ class EventFilterChips extends StatelessWidget {
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               selected: isSelected,
+              backgroundColor: colorScheme.onPrimary,
               onSelected: (_) => onFilterChanged(filter),
               showCheckmark: false,
             ),

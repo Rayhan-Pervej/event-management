@@ -5,10 +5,7 @@ class CompletionDetails {
   final String userId;
   final DateTime completedAt;
 
-  CompletionDetails({
-    required this.userId,
-    required this.completedAt,
-  });
+  CompletionDetails({required this.userId, required this.completedAt});
 
   factory CompletionDetails.fromMap(Map<String, dynamic> map) {
     return CompletionDetails(
@@ -18,10 +15,7 @@ class CompletionDetails {
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'userId': userId,
-      'completedAt': Timestamp.fromDate(completedAt),
-    };
+    return {'userId': userId, 'completedAt': Timestamp.fromDate(completedAt)};
   }
 
   factory CompletionDetails.fromJson(Map<String, dynamic> json) {
@@ -32,10 +26,7 @@ class CompletionDetails {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'userId': userId,
-      'completedAt': completedAt.toIso8601String(),
-    };
+    return {'userId': userId, 'completedAt': completedAt.toIso8601String()};
   }
 }
 
@@ -49,7 +40,8 @@ class TaskModel {
   final DateTime deadline;
   final String status; // 'pending', 'in_progress', 'completed'
   final String priority; // 'low', 'medium', 'high'
-  final List<CompletionDetails> completedBy; // List of users who completed with timestamps
+  final List<CompletionDetails>
+  completedBy; // List of users who completed with timestamps
   final String createdBy;
   final DateTime createdAt;
 
@@ -75,7 +67,9 @@ class TaskModel {
     List<CompletionDetails> completedByList = [];
     if (data['completedBy'] != null) {
       completedByList = (data['completedBy'] as List)
-          .map((item) => CompletionDetails.fromMap(item as Map<String, dynamic>))
+          .map(
+            (item) => CompletionDetails.fromMap(item as Map<String, dynamic>),
+          )
           .toList();
     }
 
@@ -100,7 +94,9 @@ class TaskModel {
     List<CompletionDetails> completedByList = [];
     if (json['completedBy'] != null) {
       completedByList = (json['completedBy'] as List)
-          .map((item) => CompletionDetails.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => CompletionDetails.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     }
 
@@ -131,7 +127,9 @@ class TaskModel {
       'deadline': Timestamp.fromDate(deadline),
       'status': status,
       'priority': priority,
-      'completedBy': completedBy.map((completion) => completion.toMap()).toList(),
+      'completedBy': completedBy
+          .map((completion) => completion.toMap())
+          .toList(),
       'createdBy': createdBy,
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -152,7 +150,9 @@ class TaskModel {
       'deadline': deadline.toIso8601String(),
       'status': status,
       'priority': priority,
-      'completedBy': completedBy.map((completion) => completion.toJson()).toList(),
+      'completedBy': completedBy
+          .map((completion) => completion.toJson())
+          .toList(),
       'createdBy': createdBy,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -274,4 +274,6 @@ class TaskModel {
 
   @override
   int get hashCode => id.hashCode;
+
+  int get completedCount => completedBy.length;
 }

@@ -34,7 +34,7 @@ class DefaultAppBar extends StatelessWidget implements PreferredSizeWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: backgroundColor ?? colorScheme.surface,
+        color: backgroundColor ?? colorScheme.onPrimary,
         boxShadow: [
           BoxShadow(
             color: colorScheme.onSurface.withOpacity(0.1),
@@ -47,7 +47,7 @@ class DefaultAppBar extends StatelessWidget implements PreferredSizeWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           AppBar(
-            backgroundColor: backgroundColor ?? colorScheme.surface,
+            backgroundColor: backgroundColor ?? colorScheme.onPrimary,
             foregroundColor: textColor ?? colorScheme.onSurface,
             title:
                 titleWidget ??

@@ -272,7 +272,11 @@ class CreateEventProvider extends ChangeNotifier {
       await _eventsRepository.createEvent(event);
       await NotificationManager().refreshListeners();
       _isLoading = false;
+
       notifyListeners();
+      titleController.clear();
+      descriptionController.clear();
+      locationController.clear();
       return true;
     } catch (e) {
       _isLoading = false;
