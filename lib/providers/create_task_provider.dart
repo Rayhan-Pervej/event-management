@@ -1,10 +1,10 @@
 // File: providers/create_task_provider.dart
 import 'package:event_management/repository/event_repository.dart';
+import 'package:event_management/service/notification_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:event_management/models/task_model.dart';
 import 'package:event_management/models/event_model.dart';
 import 'package:event_management/repository/task_repository.dart';
-
 
 class CreateTaskProvider extends ChangeNotifier {
   final TasksRepository _tasksRepository = TasksRepository();
@@ -47,16 +47,12 @@ class CreateTaskProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-    
       final event = await _eventsRepository.getEventById(eventId);
-      
- 
-      
+
       _currentEvent = event;
       _isLoadingEvent = false;
       notifyListeners();
     } catch (e) {
-     
       _isLoadingEvent = false;
       notifyListeners();
       rethrow;
@@ -93,42 +89,41 @@ class CreateTaskProvider extends ChangeNotifier {
 
   List<String> getAllEventMembers() {
     if (_currentEvent == null) {
-    
       return [];
     }
-    
-   
+
     final allMembers = <String>{};
-    
+
     // Add admin IDs from EventParticipant objects
     final adminIds = _currentEvent!.admins.map((admin) => admin.id).toList();
-   
+
     allMembers.addAll(adminIds);
-    
-    // Add member IDs from EventParticipant objects  
-    final memberIds = _currentEvent!.members.map((member) => member.id).toList();
-  
+
+    // Add member IDs from EventParticipant objects
+    final memberIds = _currentEvent!.members
+        .map((member) => member.id)
+        .toList();
+
     allMembers.addAll(memberIds);
-    
+
     final result = allMembers.toList();
 
-    
     return result;
   }
 
   List<EventParticipant> getAllEventParticipants() {
     if (_currentEvent == null) return [];
-    
+
     final allParticipants = <EventParticipant>[];
     allParticipants.addAll(_currentEvent!.admins);
     allParticipants.addAll(_currentEvent!.members);
-    
+
     // Remove duplicates by ID
     final uniqueParticipants = <String, EventParticipant>{};
     for (var participant in allParticipants) {
       uniqueParticipants[participant.id] = participant;
     }
-    
+
     return uniqueParticipants.values.toList();
   }
 
@@ -204,6 +199,7 @@ class CreateTaskProvider extends ChangeNotifier {
       );
 
       await _tasksRepository.createTask(task);
+      await NotificationManager().refreshListeners();
       _isLoading = false;
       notifyListeners();
       return true;

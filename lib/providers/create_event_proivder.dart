@@ -1,6 +1,7 @@
 // File: providers/create_event_provider.dart
 import 'package:event_management/models/event_model.dart';
 import 'package:event_management/repository/event_repository.dart';
+import 'package:event_management/service/notification_manager.dart';
 import 'package:flutter/material.dart';
 // import 'package:cloud_firestore/cloud_firestore.dart';
 // import 'package:event_management/models/event_model.dart';
@@ -127,7 +128,7 @@ class CreateEventProvider extends ChangeNotifier {
   // Member management methods
   void addMember(EventParticipant memberData) {
     // Check if member already exists and is not an admin
-    if (!_members.any((member) => member.id == memberData.id) && 
+    if (!_members.any((member) => member.id == memberData.id) &&
         !_admins.any((admin) => admin.id == memberData.id)) {
       _members.add(memberData);
       _clearError();
@@ -180,11 +181,7 @@ class CreateEventProvider extends ChangeNotifier {
     required String firstName,
     required String lastName,
   }) {
-    return EventParticipant(
-      id: id,
-      firstName: firstName,
-      lastName: lastName,
-    );
+    return EventParticipant(id: id, firstName: firstName, lastName: lastName);
   }
 
   // Error handling
@@ -201,7 +198,8 @@ class CreateEventProvider extends ChangeNotifier {
   }
 
   // Create event method - updated to work with EventParticipant objects
-  Future<bool> createEvent(String currentUserId, {
+  Future<bool> createEvent(
+    String currentUserId, {
     required String creatorFirstName,
     required String creatorLastName,
   }) async {
@@ -235,14 +233,18 @@ class CreateEventProvider extends ChangeNotifier {
       // Ensure creator is in admins list with proper details
       List<EventParticipant> finalAdmins = List.from(_admins);
       if (!finalAdmins.any((admin) => admin.id == currentUserId)) {
-        finalAdmins.add(EventParticipant(
-          id: currentUserId,
-          firstName: creatorFirstName,
-          lastName: creatorLastName,
-        ));
+        finalAdmins.add(
+          EventParticipant(
+            id: currentUserId,
+            firstName: creatorFirstName,
+            lastName: creatorLastName,
+          ),
+        );
       } else {
         // Update existing admin with correct details if they're already added
-        final index = finalAdmins.indexWhere((admin) => admin.id == currentUserId);
+        final index = finalAdmins.indexWhere(
+          (admin) => admin.id == currentUserId,
+        );
         if (index != -1) {
           finalAdmins[index] = EventParticipant(
             id: currentUserId,
@@ -268,7 +270,7 @@ class CreateEventProvider extends ChangeNotifier {
 
       // Save to Firestore
       await _eventsRepository.createEvent(event);
-
+      await NotificationManager().refreshListeners();
       _isLoading = false;
       notifyListeners();
       return true;

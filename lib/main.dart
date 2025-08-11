@@ -78,19 +78,19 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
   Timer? _notificationTimer;
   bool _notificationsInitialized = false;
-  
+
   // Platform channel for moving app to background
   static const platform = MethodChannel('app.channel.shared.data');
 
   @override
   void initState() {
     super.initState();
-    
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeNotificationService();
     });
-    
+
     FirebaseAuth.instance.authStateChanges().listen(_handleAuthStateChange);
   }
 
@@ -123,7 +123,8 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
         print('App resumed - ensuring notifications are active');
         NotificationManager().setBackgroundState(false);
         // Restart timer if it was cancelled
-        if (_notificationsInitialized && (_notificationTimer == null || !_notificationTimer!.isActive)) {
+        if (_notificationsInitialized &&
+            (_notificationTimer == null || !_notificationTimer!.isActive)) {
           _startPeriodicNotifications();
         }
         break;
@@ -185,10 +186,10 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     try {
       // Initialize notification manager
       await NotificationManager().initialize(userId);
-      
+
       // Start periodic notification checks every 1 minute
       _startPeriodicNotifications();
-      
+
       print('Notification system initialized for user: $userId');
     } catch (e) {
       print('Error initializing notifications: $e');
@@ -197,17 +198,22 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
 
   void _startPeriodicNotifications() {
     _notificationTimer?.cancel();
-    
-    // Check every 1 minute for overdue and due soon tasks
+
+    // Enhanced timer with connection monitoring
     _notificationTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (_notificationsInitialized) {
         print('Periodic notification check running...');
+
+        // Check task reminders
         NotificationManager().checkTaskReminders();
+
+        // Also ensure connection health (important for emulators)
+        NotificationManager().ensureConnectionHealth();
       } else {
         print('Notifications not initialized, skipping check');
       }
     });
-    
+
     // Also check immediately
     if (_notificationsInitialized) {
       print('Running immediate notification check...');
@@ -221,7 +227,9 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
       // This allows notifications to continue even when user logs out
       _notificationTimer?.cancel();
       _notificationTimer = null;
-      print('Notification timer cancelled, but NotificationManager preserved for background operation');
+      print(
+        'Notification timer cancelled, but NotificationManager preserved for background operation',
+      );
     } catch (e) {
       print('Error disposing notifications: $e');
     }
@@ -232,11 +240,13 @@ class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
     return WillPopScope(
       onWillPop: () async {
         // Handle back button press - move app to background using native Android method
-        print('Back button pressed - moving app to background while preserving notifications');
-        
+        print(
+          'Back button pressed - moving app to background while preserving notifications',
+        );
+
         // Use platform channel to call Android's moveTaskToBack(true)
         await moveAppToBackground();
-        
+
         // Return false to prevent default back button behavior (killing app)
         return false;
       },
