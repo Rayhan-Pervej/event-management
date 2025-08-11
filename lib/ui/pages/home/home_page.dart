@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:event_management/providers/home_provider.dart';
 import 'package:event_management/core/constants/build_text.dart';
-
 import 'package:icons_plus/icons_plus.dart';
 
 class HomePage extends StatefulWidget {
@@ -18,6 +17,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  String _currentView = 'combined'; // 'combined', 'admin', 'member'
+
   @override
   void initState() {
     super.initState();
@@ -56,113 +57,51 @@ class _HomePageState extends State<HomePage> {
           final isAdmin = currentUser != null
               ? provider.isUserAdmin(currentUser.uid)
               : false;
+          final isMember = currentUser != null
+              ? provider.isUserMember(currentUser.uid)
+              : false;
+          final isBothRoles = isAdmin && isMember;
 
           return SafeArea(
             child: RefreshIndicator(
               onRefresh: () async {
                 _loadHomeData();
               },
+              backgroundColor: colorScheme.primaryContainer,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AppDimensions.space16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Welcome Header
-                    _buildWelcomeHeader(context, currentUser),
-
+                    // Welcome Header with Role Switcher
                     AppDimensions.h24,
 
-                    // Stats Grid
-                    if (isAdmin)
-                      _buildAdminStats(context, provider)
-                    else
-                      _buildMemberStats(
-                        context,
-                        provider,
-                        currentUser?.uid ?? '',
-                      ),
-
-                    AppDimensions.h24,
-
-                    // Admin-specific sections
-                    if (isAdmin) ...[
-                      // Team Performance Section
-                      _buildSectionHeader(
-                        context,
-                        'Team Performance',
-                        Iconsax.people_outline,
-                        colorScheme.primary,
-                      ),
-                      AppDimensions.h16,
-
-                      PerformanceCard(
-                        title: 'Top Performers',
-                        members: provider.topPerformers,
-                        cardColor: Colors.green,
-                        icon: Iconsax.crown_1_outline,
-                        isTopPerformers: true,
-                      ),
-
-                      PerformanceCard(
-                        title: 'Needs Attention',
-                        members: provider.laggingMembers,
-                        cardColor: Colors.orange,
-                        icon: Iconsax.warning_2_outline,
-                        isTopPerformers: false,
-                      ),
-
+                    // Role Switcher (only show if user has both roles)
+                    if (isBothRoles) ...[
+                      _buildRoleSwitcher(context),
                       AppDimensions.h24,
-
-                      // Admin Quick Actions
-                      _buildSectionHeader(
-                        context,
-                        'Quick Actions',
-                        Iconsax.flash_1_outline,
-                        colorScheme.primary,
-                      ),
-                      AppDimensions.h16,
-                      _buildAdminQuickActions(context),
-                    ] else ...[
-                      // Member-specific sections
-                      // My Urgent Tasks
-                      _buildSectionHeader(
-                        context,
-                        'My Urgent Tasks',
-                        Iconsax.clock_outline,
-                        Colors.orange,
-                      ),
-                      AppDimensions.h16,
-                      _buildUrgentTasks(
-                        context,
-                        provider,
-                        currentUser?.uid ?? '',
-                      ),
-
-                      AppDimensions.h24,
-
-                      // My Progress
-                      _buildSectionHeader(
-                        context,
-                        'My Progress',
-                        Iconsax.chart_outline,
-                        Colors.blue,
-                      ),
-                      AppDimensions.h16,
-                      _buildMyProgressCard(context, provider),
                     ],
 
+                    // Stats Grid based on current view
+                    _buildStatsBasedOnView(
+                      context,
+                      provider,
+                      currentUser?.uid ?? '',
+                      isAdmin,
+                      isMember,
+                    ),
+
                     AppDimensions.h24,
 
-                    // Recent Activity (for both admin and member)
-                    _buildSectionHeader(
+                    // Content based on current view
+                    ..._buildContentBasedOnView(
                       context,
-                      'Recent Activity',
-                      Iconsax.activity_outline,
-                      Colors.purple,
+                      provider,
+                      currentUser?.uid ?? '',
+                      isAdmin,
+                      isMember,
                     ),
-                    AppDimensions.h16,
-                    _buildRecentActivity(context, provider),
 
                     // Bottom padding for navigation bar
                     AppDimensions.h24,
@@ -176,44 +115,184 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildWelcomeHeader(BuildContext context, User? user) {
+  Widget _buildRoleSwitcher(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final timeOfDay = DateTime.now().hour;
-    String greeting;
 
-    if (timeOfDay < 12) {
-      greeting = 'Good Morning';
-    } else if (timeOfDay < 17) {
-      greeting = 'Good Afternoon';
-    } else {
-      greeting = 'Good Evening';
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              BuildText(
-                text: greeting,
-                fontSize: 16,
-                color: colorScheme.onBackground.withOpacity(0.7),
-              ),
-              AppDimensions.h4,
-              BuildText(
-                text: user?.displayName ?? 'Welcome!',
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onBackground,
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(AppDimensions.radius8),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildRoleSwitchButton(
+              context,
+              'Combined View',
+              'combined',
+              Iconsax.element_4_outline,
+            ),
           ),
+          Expanded(
+            child: _buildRoleSwitchButton(
+              context,
+              'Admin View',
+              'admin',
+              Iconsax.crown_1_outline,
+            ),
+          ),
+          Expanded(
+            child: _buildRoleSwitchButton(
+              context,
+              'Member View',
+              'member',
+              Iconsax.user_outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleSwitchButton(
+    BuildContext context,
+    String title,
+    String view,
+    IconData icon,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isSelected = _currentView == view;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _currentView = view;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          vertical: AppDimensions.space12,
+          horizontal: AppDimensions.space8,
         ),
-        IconButton(
-          onPressed: _loadHomeData,
-          icon: Icon(Iconsax.refresh_outline, color: colorScheme.onBackground),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colorScheme.primary.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppDimensions.radius8),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.onSurface.withOpacity(0.6),
+              size: 20,
+            ),
+            AppDimensions.h4,
+            BuildText(
+              text: title,
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.onSurface.withOpacity(0.6),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsBasedOnView(
+    BuildContext context,
+    HomeProvider provider,
+    String userId,
+    bool isAdmin,
+    bool isMember,
+  ) {
+    switch (_currentView) {
+      case 'admin':
+        return isAdmin
+            ? _buildAdminStats(context, provider)
+            : _buildNoAccessMessage('admin');
+      case 'member':
+        return isMember
+            ? _buildMemberStats(context, provider, userId)
+            : _buildNoAccessMessage('member');
+      default: // combined
+        return _buildCombinedStats(
+          context,
+          provider,
+          userId,
+          isAdmin,
+          isMember,
+        );
+    }
+  }
+
+  Widget _buildCombinedStats(
+    BuildContext context,
+    HomeProvider provider,
+    String userId,
+    bool isAdmin,
+    bool isMember,
+  ) {
+    final urgentTasks = provider.getUrgentTasks(userId);
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: AppDimensions.space12,
+      mainAxisSpacing: AppDimensions.space12,
+      childAspectRatio: 1,
+      children: [
+        // Always show user's personal stats
+        HomeStatCard(
+          title: 'My Events',
+          value: provider.myActiveEvents.toString(),
+          icon: Iconsax.calendar_1_outline,
+          color: Colors.blue,
+          subtitle: 'active events',
+        ),
+        HomeStatCard(
+          title: 'My Performance',
+          value: '${provider.myCompletionRate.toInt()}%',
+          icon: Iconsax.chart_success_outline,
+          color: Colors.green,
+          subtitle: 'completion rate',
+        ),
+        // Show admin stats if user is admin
+        if (isAdmin)
+          HomeStatCard(
+            title: 'Team Rate',
+            value: '${provider.teamCompletionRate.toInt()}%',
+            icon: Iconsax.people_outline,
+            color: Colors.purple,
+            subtitle: 'team completion',
+          )
+        else
+          HomeStatCard(
+            title: 'This Week',
+            value: provider.myCompletedTasksThisWeek.toString(),
+            icon: Iconsax.tick_circle_outline,
+            color: Colors.purple,
+            subtitle: 'completed tasks',
+          ),
+        // Show urgent tasks or overdue tasks based on role
+        HomeStatCard(
+          title: isAdmin ? 'Overdue Tasks' : 'Urgent Tasks',
+          value: isAdmin
+              ? provider.totalOverdueTasks.toString()
+              : urgentTasks.length.toString(),
+          icon: Iconsax.warning_2_outline,
+          color: Colors.red,
+          subtitle: isAdmin ? 'team overdue' : 'need attention',
         ),
       ],
     );
@@ -273,7 +352,7 @@ class _HomePageState extends State<HomePage> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: AppDimensions.space12,
       mainAxisSpacing: AppDimensions.space12,
-      childAspectRatio: 1.2,
+      childAspectRatio: 1,
       children: [
         HomeStatCard(
           title: 'My Events',
@@ -307,6 +386,216 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildNoAccessMessage(String role) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.space24),
+      decoration: BoxDecoration(
+        color: colorScheme.onPrimary,
+        borderRadius: BorderRadius.circular(AppDimensions.radius12),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            role == 'admin' ? Iconsax.crown_1_outline : Iconsax.user_outline,
+            size: 48,
+            color: colorScheme.onSurface.withOpacity(0.3),
+          ),
+          AppDimensions.h12,
+          BuildText(
+            text: 'No $role access',
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurface,
+          ),
+          AppDimensions.h4,
+          BuildText(
+            text: 'You don\'t have $role privileges in any events',
+            fontSize: 14,
+            color: colorScheme.onSurface.withOpacity(0.7),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildContentBasedOnView(
+    BuildContext context,
+    HomeProvider provider,
+    String userId,
+    bool isAdmin,
+    bool isMember,
+  ) {
+    switch (_currentView) {
+      case 'admin':
+        return isAdmin ? _buildAdminContent(context, provider) : [];
+      case 'member':
+        return isMember ? _buildMemberContent(context, provider, userId) : [];
+      default: // combined
+        return _buildCombinedContent(
+          context,
+          provider,
+          userId,
+          isAdmin,
+          isMember,
+        );
+    }
+  }
+
+  List<Widget> _buildAdminContent(BuildContext context, HomeProvider provider) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return [
+      // Team Performance Section
+      _buildSectionHeader(
+        context,
+        'Team Performance',
+        Iconsax.people_outline,
+        colorScheme.primary,
+      ),
+      AppDimensions.h16,
+      PerformanceCard(
+        title: 'Top Performers',
+        members: provider.topPerformers,
+        cardColor: Colors.green,
+        icon: Iconsax.crown_1_outline,
+        isTopPerformers: true,
+      ),
+      PerformanceCard(
+        title: 'Needs Attention',
+        members: provider.laggingMembers,
+        cardColor: Colors.orange,
+        icon: Iconsax.warning_2_outline,
+        isTopPerformers: false,
+      ),
+      AppDimensions.h24,
+      // Admin Quick Actions
+      // _buildSectionHeader(
+      //   context,
+      //   'Quick Actions',
+      //   Iconsax.flash_1_outline,
+      //   colorScheme.primary,
+      // ),
+      AppDimensions.h16,
+      _buildAdminQuickActions(context),
+      AppDimensions.h24,
+      // Recent Activity
+      _buildSectionHeader(
+        context,
+        'Recent Activity',
+        Iconsax.activity_outline,
+        Colors.purple,
+      ),
+      AppDimensions.h16,
+      _buildRecentActivity(context, provider),
+    ];
+  }
+
+  List<Widget> _buildMemberContent(
+    BuildContext context,
+    HomeProvider provider,
+    String userId,
+  ) {
+    return [
+      // My Urgent Tasks
+      Align(
+        child: _buildSectionHeader(
+          context,
+          'My Urgent Tasks',
+          Iconsax.clock_outline,
+          Colors.orange,
+        ),
+      ),
+      AppDimensions.h16,
+      _buildUrgentTasks(context, provider, userId),
+      AppDimensions.h24,
+      // My Progress
+      _buildSectionHeader(
+        context,
+        'My Progress',
+        Iconsax.chart_outline,
+        Colors.blue,
+      ),
+      AppDimensions.h16,
+      _buildMyProgressCard(context, provider),
+      AppDimensions.h24,
+      // Recent Activity
+      _buildSectionHeader(
+        context,
+        'Recent Activity',
+        Iconsax.activity_outline,
+        Colors.purple,
+      ),
+      AppDimensions.h16,
+      _buildRecentActivity(context, provider),
+    ];
+  }
+
+  List<Widget> _buildCombinedContent(
+    BuildContext context,
+    HomeProvider provider,
+    String userId,
+    bool isAdmin,
+    bool isMember,
+  ) {
+    List<Widget> content = [];
+
+    // Show urgent tasks for members
+    if (isMember) {
+      content.addAll([
+        _buildSectionHeader(
+          context,
+          'My Urgent Tasks',
+          Iconsax.clock_outline,
+          Colors.orange,
+        ),
+        AppDimensions.h16,
+        _buildUrgentTasks(context, provider, userId),
+        AppDimensions.h24,
+      ]);
+    }
+
+    // Show top performers for admins (condensed)
+    if (isAdmin && provider.topPerformers.isNotEmpty) {
+      content.addAll([
+        _buildSectionHeader(
+          context,
+          'Top Performers',
+          Iconsax.crown_1_outline,
+          Colors.green,
+        ),
+        AppDimensions.h16,
+        PerformanceCard(
+          title: 'Top Performers',
+          members: provider.topPerformers.take(2).toList(), // Show only top 2
+          cardColor: Colors.green,
+          icon: Iconsax.crown_1_outline,
+          isTopPerformers: true,
+        ),
+        AppDimensions.h24,
+      ]);
+    }
+
+    // Always show recent activity
+    content.addAll([
+      _buildSectionHeader(
+        context,
+        'Recent Activity',
+        Iconsax.activity_outline,
+        Colors.purple,
+      ),
+      AppDimensions.h16,
+      _buildRecentActivity(context, provider),
+    ]);
+
+    return content;
+  }
+
   Widget _buildAdminQuickActions(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -314,7 +603,7 @@ class _HomePageState extends State<HomePage> {
     return Container(
       padding: const EdgeInsets.all(AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
         border: Border.all(
           color: colorScheme.outline.withOpacity(0.2),
@@ -364,12 +653,14 @@ class _HomePageState extends State<HomePage> {
     Color color,
     VoidCallback onTap,
   ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(AppDimensions.space12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(AppDimensions.radius8),
           border: Border.all(color: color.withOpacity(0.3), width: 1),
         ),
@@ -403,7 +694,7 @@ class _HomePageState extends State<HomePage> {
       return Container(
         padding: const EdgeInsets.all(AppDimensions.space24),
         decoration: BoxDecoration(
-          color: colorScheme.onPrimary,
+          color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(AppDimensions.radius12),
         ),
         child: Column(
@@ -434,7 +725,7 @@ class _HomePageState extends State<HomePage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
       ),
       child: Column(
@@ -583,7 +874,7 @@ class _HomePageState extends State<HomePage> {
       return Container(
         padding: const EdgeInsets.all(AppDimensions.space24),
         decoration: BoxDecoration(
-          color: colorScheme.onPrimary,
+          color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(AppDimensions.radius12),
         ),
         child: Center(
@@ -608,7 +899,7 @@ class _HomePageState extends State<HomePage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
       ),
       child: Column(

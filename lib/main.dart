@@ -64,6 +64,8 @@ class MyApp extends StatelessWidget {
             title: 'Event Management',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
             home: AuthWrapper(),
           );
         },

@@ -111,7 +111,7 @@ class EventTasksTab extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
       ),
       child: Row(
@@ -194,7 +194,7 @@ class EventTasksTab extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: AppDimensions.space12),
       padding: const EdgeInsets.all(AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
         border: task.isOverdue ? Border.all(color: Colors.red, width: 1) : null,
       ),
@@ -282,7 +282,7 @@ class EventTasksTab extends StatelessWidget {
               // Three-dot menu (for admin only)
               if (isAdmin)
                 PopupMenuButton<String>(
-                  color: colorScheme.onPrimary,
+                  color: colorScheme.primaryContainer,
                   icon: Icon(
                     Iconsax.more_outline,
                     color: colorScheme.onSurface.withOpacity(0.5),
@@ -541,7 +541,7 @@ class EventTasksTab extends StatelessWidget {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: colorScheme.surface,
+            backgroundColor: colorScheme.primaryContainer,
             title: BuildText(
               text: 'Mark as Incomplete',
               fontSize: 18,
@@ -659,31 +659,20 @@ class EventTasksTab extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Iconsax.task_square_outline,
-            size: 64,
-            color: colorScheme.onSurface.withOpacity(0.3),
-          ),
+          Icon(Iconsax.task_square_outline, size: 64),
           AppDimensions.h16,
-          BuildText(
-            text: 'No tasks yet',
-            fontSize: 16,
-            color: colorScheme.onSurface.withOpacity(0.6),
-          ),
+          BuildText(text: 'No tasks yet', fontSize: 16),
           AppDimensions.h8,
           BuildText(
             text: isAdmin
                 ? 'Create your first task to get started'
                 : 'Tasks will appear here when created',
             fontSize: 14,
-            color: colorScheme.onSurface.withOpacity(0.5),
+
             textAlign: TextAlign.center,
           ),
         ],
@@ -698,7 +687,7 @@ class EventTasksTab extends StatelessWidget {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            backgroundColor: colorScheme.onPrimary,
+            backgroundColor: colorScheme.primaryContainer,
             title: BuildText(
               text: 'Delete Task',
               fontSize: 18,
@@ -731,9 +720,5 @@ class EventTasksTab extends StatelessWidget {
           ),
         ) ??
         false;
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 }

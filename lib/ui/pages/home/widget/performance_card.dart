@@ -32,7 +32,7 @@ class PerformanceCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: AppDimensions.space16),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
         border: Border.all(color: cardColor.withOpacity(0.2), width: 1),
         boxShadow: [

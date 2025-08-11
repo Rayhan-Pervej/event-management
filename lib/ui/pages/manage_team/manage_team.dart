@@ -82,31 +82,37 @@ class _ManageTeamPageState extends State<ManageTeamPage> {
           builder: (context, provider, child) {
             return Padding(
               padding: const EdgeInsets.all(AppDimensions.space16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Search Section
-                  const UserSearchWidget(),
-                  // Search Results
-                  const Expanded(child: SearchResultsWidget()),
-                  AppDimensions.h16,
-
-                  // Role Selection
-                  if (provider.hasSelectedUsers) ...[
-                    const RoleSelectionWidget(),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Search Section
+                    const UserSearchWidget(),
                     AppDimensions.h16,
-                  ],
-
-                  // Selected Users & Submit Section
-                  if (provider.hasSelectedUsers) ...[
-                    SelectedUsersWidget(
-                      onMembersAdded: () {
-                        _markAsChanged();
-                      },
+                    // Search Results
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.4,
+                      child: SearchResultsWidget(),
                     ),
                     AppDimensions.h16,
+
+                    // Role Selection
+                    if (provider.hasSelectedUsers) ...[
+                      const RoleSelectionWidget(),
+                      AppDimensions.h16,
+                    ],
+
+                    // Selected Users & Submit Section
+                    if (provider.hasSelectedUsers) ...[
+                      SelectedUsersWidget(
+                        onMembersAdded: () {
+                          _markAsChanged();
+                        },
+                      ),
+                      AppDimensions.h16,
+                    ],
                   ],
-                ],
+                ),
               ),
             );
           },

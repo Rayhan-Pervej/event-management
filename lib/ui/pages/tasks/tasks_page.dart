@@ -79,7 +79,7 @@ class _UserTasksPageState extends State<UserTasksPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       appBar: DefaultAppBar(
         title: 'My Tasks',
         isShowBackButton: false,
@@ -344,7 +344,7 @@ class _UserTasksPageState extends State<UserTasksPage> {
         vertical: AppDimensions.space12,
       ),
       decoration: BoxDecoration(
-        color: colorScheme.onPrimary,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
         border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),

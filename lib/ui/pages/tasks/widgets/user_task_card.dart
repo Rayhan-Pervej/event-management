@@ -34,7 +34,7 @@ class UserTaskCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: AppDimensions.space12),
         decoration: BoxDecoration(
-          color: colorScheme.onPrimary,
+          color: colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(AppDimensions.radius12),
           border: task.isOverdue && !task.isCompleted
               ? Border.all(color: Colors.red, width: 1.5)
@@ -64,9 +64,7 @@ class UserTaskCard extends StatelessWidget {
                           text: task.title,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: task.isCompleted
-                              ? colorScheme.onSurface.withOpacity(0.6)
-                              : colorScheme.onSurface,
+
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),

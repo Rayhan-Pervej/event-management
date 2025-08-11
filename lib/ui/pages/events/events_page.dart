@@ -151,7 +151,7 @@ class _EventsPageState extends State<EventsPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: const DefaultAppBar(
+      appBar: DefaultAppBar(
         title: 'Events',
         isShowBackButton: false,
         centerTitle: false,

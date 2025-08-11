@@ -33,7 +33,7 @@ class EventFilterChips extends StatelessWidget {
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
               selected: isSelected,
-              backgroundColor: colorScheme.onPrimary,
+              backgroundColor: colorScheme.primaryContainer,
               onSelected: (_) => onFilterChanged(filter),
               showCheckmark: false,
             ),

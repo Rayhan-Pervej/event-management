@@ -63,7 +63,9 @@ class SearchResultsWidget extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: colorScheme.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(AppDimensions.radius8),
+                        borderRadius: BorderRadius.circular(
+                          AppDimensions.radius8,
+                        ),
                       ),
                       child: BuildText(
                         text: provider.searchResults.length.toString(),
@@ -174,11 +176,11 @@ class _UserCard extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: AppDimensions.space8),
           decoration: BoxDecoration(
-            color: isSelected 
+            color: isSelected
                 ? colorScheme.primary.withOpacity(0.1)
                 : colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(AppDimensions.radius8),
-            border: isSelected 
+            border: isSelected
                 ? Border.all(color: colorScheme.primary, width: 1)
                 : null,
           ),

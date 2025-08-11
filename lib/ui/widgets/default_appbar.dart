@@ -47,7 +47,7 @@ class DefaultAppBar extends StatelessWidget implements PreferredSizeWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           AppBar(
-            backgroundColor: backgroundColor ?? colorScheme.onPrimary,
+            backgroundColor: backgroundColor ?? colorScheme.primaryContainer,
             foregroundColor: textColor ?? colorScheme.onSurface,
             title:
                 titleWidget ??

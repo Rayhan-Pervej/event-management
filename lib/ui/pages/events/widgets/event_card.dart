@@ -19,7 +19,7 @@ class EventCard extends StatelessWidget {
 
     return Card(
       elevation: 2,
-      color: colorScheme.onPrimary,
+      color: colorScheme.primaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: onTap,
