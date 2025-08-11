@@ -74,7 +74,7 @@ class NavigationPage extends StatelessWidget {
                 ),
                 BottomNavigationBarItem(
                   icon: Icon(Iconsax.task_square_outline),
-                  activeIcon: Icon(Iconsax.task_square_outline),
+                  activeIcon: Icon(Iconsax.task_square_bold),
                   label: 'Tasks',
                 ),
                 BottomNavigationBarItem(
