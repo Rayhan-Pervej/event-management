@@ -42,13 +42,23 @@ class _UserTasksPageState extends State<UserTasksPage> {
 
     final provider = context.read<UserTasksProvider>();
     final task = provider.allTasks.firstWhere((t) => t.id == taskId);
-    final isCompleted = task.isCompletedByUser(currentUser.uid);
+
+    // FIXED: Handle completion check for both task types
+    final isCompleted = task.isRecurring
+        ? task.isCompletedToday(currentUser.uid)
+        : task.isCompletedByUser(currentUser.uid);
 
     bool success;
     if (isCompleted) {
-      success = await provider.uncompleteTask(taskId, currentUser.uid);
+      // FIXED: Use appropriate uncomplete method
+      success = task.isRecurring
+          ? await provider.uncompleteTaskToday(taskId, currentUser.uid)
+          : await provider.uncompleteTask(taskId, currentUser.uid);
     } else {
-      success = await provider.completeTask(taskId, currentUser.uid);
+      // FIXED: Use appropriate complete method
+      success = task.isRecurring
+          ? await provider.completeTaskToday(taskId, currentUser.uid)
+          : await provider.completeTask(taskId, currentUser.uid);
     }
 
     if (success) {
@@ -58,7 +68,13 @@ class _UserTasksPageState extends State<UserTasksPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isCompleted ? 'Task marked as incomplete' : 'Task completed!',
+            isCompleted
+                ? (task.isRecurring
+                      ? 'Task marked as incomplete for today'
+                      : 'Task marked as incomplete')
+                : (task.isRecurring
+                      ? 'Task completed for today!'
+                      : 'Task completed!'),
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -257,9 +273,23 @@ class _UserTasksPageState extends State<UserTasksPage> {
                     initiallyExpanded: true,
                   ),
 
+                  // NEW: Recurring tasks pending today
+                  TaskSection(
+                    title: 'Recurring Tasks',
+                    tasks: provider.recurringTasksPending,
+                    eventsMap: provider.eventsMap,
+                    currentUserId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                    onTaskToggle: _handleTaskToggle,
+                    headerColor: Colors.purple,
+                    headerIcon: Icons.repeat,
+                    initiallyExpanded: true,
+                  ),
+
+                  // UPDATED: Combined completed tasks (both single and recurring)
                   TaskSection(
                     title: 'Completed Tasks',
-                    tasks: provider.completedTasks,
+                    tasks: provider
+                        .allCompletedTasks, // FIXED: Use combined completed tasks
                     eventsMap: provider.eventsMap,
                     currentUserId: FirebaseAuth.instance.currentUser?.uid ?? '',
                     onTaskToggle: _handleTaskToggle,
@@ -283,46 +313,73 @@ class _UserTasksPageState extends State<UserTasksPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _buildStatCard(
-            context,
-            title: 'Total',
-            count: provider.totalTasks,
-            color: colorScheme.primary,
-            icon: Iconsax.task_square_outline,
-          ),
-        ),
-        AppDimensions.w12,
-        Expanded(
-          child: _buildStatCard(
-            context,
-            title: 'Pending',
-            count: provider.pendingCount,
-            color: Colors.orange,
-            icon: Iconsax.clock_outline,
-          ),
-        ),
-        AppDimensions.w12,
-        Expanded(
-          child: _buildStatCard(
-            context,
-            title: 'Overdue',
-            count: provider.overdueCount,
-            color: Colors.red,
-            icon: Iconsax.warning_2_outline,
-          ),
-        ),
-        AppDimensions.w12,
-        Expanded(
-          child: _buildStatCard(
-            context,
-            title: 'Done',
-            count: provider.completedCount,
-            color: Colors.green,
-            icon: Iconsax.tick_circle_outline,
-          ),
+        // First row - Overall stats
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                context,
+                title: 'Total',
+                count: provider.totalTasks,
+                color: colorScheme.primary,
+                icon: Iconsax.task_square_outline,
+              ),
+            ),
+            AppDimensions.w12,
+            Expanded(
+              child: _buildStatCard(
+                context,
+                title: 'Pending',
+                count: provider
+                    .totalPendingToday, // FIXED: Use combined pending count
+                color: Colors.orange,
+                icon: Iconsax.clock_outline,
+              ),
+            ),
+            AppDimensions.w12,
+            Expanded(
+              child: _buildStatCard(
+                context,
+                title: 'Overdue',
+                count: provider.overdueCount,
+                color: Colors.red,
+                icon: Iconsax.warning_2_outline,
+              ),
+            ),
+            AppDimensions.w12,
+            Expanded(
+              child: _buildStatCard(
+                context,
+                title: 'Done',
+                count: provider
+                    .totalCompletedToday, // FIXED: Use combined completed count
+                color: Colors.green,
+                icon: Iconsax.tick_circle_outline,
+              ),
+            ),
+            // AppDimensions.w12,
+            // Expanded(
+            //   child: _buildStatCard(
+            //     context,
+            //     title: 'Single',
+            //     count: provider.singleTasksCount,
+            //     color: Colors.blue,
+            //     icon: Iconsax.document_outline,
+            //   ),
+            // ),
+            // AppDimensions.w12,
+            // Expanded(
+            //   child: _buildStatCard(
+            //     context,
+            //     title: 'Recurring',
+            //     count: provider.recurringTasksCount,
+            //     color: Colors.purple,
+            //     icon: Icons.repeat,
+            //   ),
+            // ),
+          ],
         ),
       ],
     );

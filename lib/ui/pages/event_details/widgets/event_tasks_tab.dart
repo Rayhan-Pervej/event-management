@@ -124,28 +124,7 @@ class EventTasksTab extends StatelessWidget {
                   color: colorScheme.primary,
                 ),
               ),
-              Expanded(
-                child: _buildStatItem(
-                  context,
-                  label: 'Single Tasks',
-                  value: provider.singleTasksCount.toString(),
-                  color: Colors.blue,
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  context,
-                  label: 'Recurring',
-                  value: provider.recurringTasksCount.toString(),
-                  color: Colors.purple,
-                ),
-              ),
-            ],
-          ),
-          AppDimensions.h12,
-          // Second row - Single task status (only for single tasks)
-          Row(
-            children: [
+
               Expanded(
                 child: _buildStatItem(
                   context,

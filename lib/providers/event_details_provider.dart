@@ -26,13 +26,27 @@ class EventDetailsProvider extends ChangeNotifier {
   // Task filtering - FIXED to handle recurring tasks properly
   List<TaskModel> get singleTasks =>
       _tasks.where((task) => !task.isRecurring).toList();
-  
+
   List<TaskModel> get recurringTasks =>
       _tasks.where((task) => task.isRecurring).toList();
 
   // Single task filtering (only applies to single tasks)
-  List<TaskModel> get pendingTasks =>
-      singleTasks.where((task) => task.isPending).toList();
+  List<TaskModel> get pendingTasks {
+    final pending = <TaskModel>[];
+
+    // Add pending single tasks
+    pending.addAll(singleTasks.where((task) => task.isPending));
+
+    // Add recurring tasks that are pending for current period
+    // Since we don't have currentUserId in EventDetailsProvider,
+    // we'll check if ANY user hasn't completed it for the current period
+    pending.addAll(
+      recurringTasks.where((task) => _isRecurringTaskPending(task)),
+    );
+
+    return pending;
+  }
+
   List<TaskModel> get inProgressTasks =>
       singleTasks.where((task) => task.isInProgress).toList();
   List<TaskModel> get completedTasks =>
@@ -66,6 +80,80 @@ class EventDetailsProvider extends ChangeNotifier {
     return getUserSingleTasks(userId).where((task) => task.isPending).toList();
   }
 
+  bool _isRecurringTaskPending(TaskModel task) {
+    switch (task.recurrenceType) {
+      case RecurrenceType.daily:
+        // Check if task is not completed today by all assigned users
+        return !_isCompletedTodayByAll(task);
+
+      case RecurrenceType.weekly:
+        return !_isCompletedThisWeekByAny(task);
+
+      case RecurrenceType.monthly:
+        return !_isCompletedThisMonthByAny(task);
+
+      case RecurrenceType.yearly:
+        return !_isCompletedThisYearByAny(task);
+
+      case RecurrenceType.none:
+        return false;
+    }
+  }
+
+  bool _isCompletedTodayByAll(TaskModel task) {
+    final todayStr = TaskModel.getTodayDateString();
+    final completedCount = task.getCompletionCountForDate(todayStr);
+    return completedCount >= task.totalAssignees;
+  }
+
+  bool _isCompletedThisWeekByAny(TaskModel task) {
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+
+    for (int i = 0; i < 7; i++) {
+      final date = startOfWeek.add(Duration(days: i));
+      final dateStr =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      if (task.getCompletionCountForDate(dateStr) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isCompletedThisMonthByAny(TaskModel task) {
+    final now = DateTime.now();
+    final year = now.year;
+    final month = now.month;
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+
+    for (int day = 1; day <= daysInMonth; day++) {
+      final dateStr =
+          '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+      if (task.getCompletionCountForDate(dateStr) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _isCompletedThisYearByAny(TaskModel task) {
+    final now = DateTime.now();
+    final year = now.year;
+
+    for (int month = 1; month <= 12; month++) {
+      final daysInMonth = DateTime(year, month + 1, 0).day;
+      for (int day = 1; day <= daysInMonth; day++) {
+        final dateStr =
+            '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+        if (task.getCompletionCountForDate(dateStr) > 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // FIXED: Updated to handle both single and recurring tasks
   List<TaskModel> getUserCompletedTasks(String userId) {
     final userTasks = getUserTasks(userId);
@@ -80,16 +168,16 @@ class EventDetailsProvider extends ChangeNotifier {
 
   // NEW: Get user's recurring tasks not completed today
   List<TaskModel> getUserPendingRecurringTasks(String userId) {
-    return getUserRecurringTasks(userId)
-        .where((task) => !task.isCompletedToday(userId))
-        .toList();
+    return getUserRecurringTasks(
+      userId,
+    ).where((task) => !task.isCompletedToday(userId)).toList();
   }
 
   // NEW: Get user's recurring tasks completed today
   List<TaskModel> getUserCompletedRecurringTasksToday(String userId) {
-    return getUserRecurringTasks(userId)
-        .where((task) => task.isCompletedToday(userId))
-        .toList();
+    return getUserRecurringTasks(
+      userId,
+    ).where((task) => task.isCompletedToday(userId)).toList();
   }
 
   // Initialize event details
@@ -137,12 +225,11 @@ class EventDetailsProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      final singleTasksList = await _tasksRepository.getSingleTasksByEventId(eventId);
+      final singleTasksList = await _tasksRepository.getSingleTasksByEventId(
+        eventId,
+      );
       // Keep existing recurring tasks and replace single tasks
-      _tasks = [
-        ...recurringTasks,
-        ...singleTasksList,
-      ];
+      _tasks = [...recurringTasks, ...singleTasksList];
       _sortTasks();
     } catch (e) {
       _setError('Failed to load single tasks: ${e.toString()}');
@@ -157,12 +244,10 @@ class EventDetailsProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      final recurringTasksList = await _tasksRepository.getRecurringTasksByEventId(eventId);
+      final recurringTasksList = await _tasksRepository
+          .getRecurringTasksByEventId(eventId);
       // Keep existing single tasks and replace recurring tasks
-      _tasks = [
-        ...singleTasks,
-        ...recurringTasksList,
-      ];
+      _tasks = [...singleTasks, ...recurringTasksList];
       _sortTasks();
     } catch (e) {
       _setError('Failed to load recurring tasks: ${e.toString()}');
@@ -361,9 +446,17 @@ class EventDetailsProvider extends ChangeNotifier {
   }
 
   // FIXED: Complete a task (handles both single and recurring)
-  Future<bool> completeTask(String taskId, String userId, {String? date}) async {
+  Future<bool> completeTask(
+    String taskId,
+    String userId, {
+    String? date,
+  }) async {
     try {
-      final success = await _tasksRepository.completeTask(taskId, userId, date: date);
+      final success = await _tasksRepository.completeTask(
+        taskId,
+        userId,
+        date: date,
+      );
       if (success) {
         // Reload tasks from database to get the updated state
         final currentEventId = _event?.id;
@@ -384,7 +477,11 @@ class EventDetailsProvider extends ChangeNotifier {
   }
 
   // NEW: Complete recurring task for specific date
-  Future<bool> completeTaskForDate(String taskId, String userId, String date) async {
+  Future<bool> completeTaskForDate(
+    String taskId,
+    String userId,
+    String date,
+  ) async {
     return completeTask(taskId, userId, date: date);
   }
 
@@ -398,7 +495,10 @@ class EventDetailsProvider extends ChangeNotifier {
         return false;
       }
 
-      final success = await _tasksRepository.updateTaskStatus(taskId, newStatus);
+      final success = await _tasksRepository.updateTaskStatus(
+        taskId,
+        newStatus,
+      );
       if (success) {
         // Update local task
         final taskIndex = _tasks.indexWhere((task) => task.id == taskId);
@@ -434,9 +534,17 @@ class EventDetailsProvider extends ChangeNotifier {
   }
 
   // FIXED: Uncomplete task (handles both single and recurring)
-  Future<bool> uncompleteTask(String taskId, String userId, {String? date}) async {
+  Future<bool> uncompleteTask(
+    String taskId,
+    String userId, {
+    String? date,
+  }) async {
     try {
-      final success = await _tasksRepository.uncompleteTask(taskId, userId, date: date);
+      final success = await _tasksRepository.uncompleteTask(
+        taskId,
+        userId,
+        date: date,
+      );
       if (success) {
         // Reload tasks from database to get the updated state
         final currentEventId = _event?.id;
@@ -471,7 +579,10 @@ class EventDetailsProvider extends ChangeNotifier {
   }
 
   // NEW: Get user's completion history for a recurring task
-  Future<List<String>> getUserCompletionHistory(String taskId, String userId) async {
+  Future<List<String>> getUserCompletionHistory(
+    String taskId,
+    String userId,
+  ) async {
     try {
       return await _tasksRepository.getUserCompletionHistory(taskId, userId);
     } catch (e) {

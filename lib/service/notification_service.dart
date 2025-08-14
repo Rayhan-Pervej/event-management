@@ -171,6 +171,17 @@ class NotificationService {
         ledColor: Color(0xFF673AB7),
         showBadge: true,
       );
+      const recurringTaskCompletionsChannel = AndroidNotificationChannel(
+        'recurring_task_completions',
+        'Recurring Task Completions',
+        description: 'Notifications when recurring tasks are completed',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF4CAF50),
+        showBadge: true,
+      );
       const adminRecurringStatusChannel = AndroidNotificationChannel(
         'admin_recurring_status',
         'Admin: Recurring Task Status',
@@ -181,6 +192,9 @@ class NotificationService {
         enableLights: true,
         ledColor: Color(0xFF795548),
         showBadge: true,
+      );
+      await androidImplementation.createNotificationChannel(
+        recurringTaskCompletionsChannel,
       );
       await androidImplementation.createNotificationChannel(
         recurringTaskRemindersChannel,
@@ -336,6 +350,110 @@ class NotificationService {
       print('Event invitation notification sent: $eventTitle (ID: $uniqueId)');
     } catch (e) {
       print('Error sending event invitation notification: $e');
+    }
+  }
+
+  // Show recurring task completion notification - FOR ADMINS
+  Future<void> showRecurringTaskCompletedNotification({
+    required String taskTitle,
+    required String completedByFirstName,
+    required String eventTitle,
+    required String taskId,
+    required String recurrenceType,
+    required String completionDate,
+  }) async {
+    if (!_isInitialized) return;
+
+    const androidDetails = AndroidNotificationDetails(
+      'recurring_task_completions',
+      'Recurring Task Completions',
+      channelDescription: 'Notifications when recurring tasks are completed',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+      color: Color(0xFF4CAF50),
+      autoCancel: false,
+      ongoing: false,
+      channelShowBadge: true,
+      showWhen: true,
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '✅ Recurring Task Completed',
+        summaryText: 'Event Management App',
+        htmlFormatContent: false,
+        htmlFormatContentTitle: false,
+        htmlFormatSummaryText: false,
+      ),
+      enableLights: true,
+      ledColor: Color(0xFF4CAF50),
+      ledOnMs: 1000,
+      ledOffMs: 500,
+      ticker: 'Recurring task completed notification',
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    // Format the completion date for display
+    String formattedDate = _formatCompletionDate(completionDate);
+
+    final body =
+        '$completedByFirstName completed $recurrenceType task "$taskTitle" in $eventTitle ($formattedDate)';
+
+    try {
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
+      await _notifications.show(
+        uniqueId,
+        '✅ Recurring Task Completed',
+        body,
+        notificationDetails,
+        payload: 'recurring_completed:$taskId',
+      );
+
+      await _logNotification(
+        'Recurring Task Completion',
+        taskTitle,
+        eventTitle,
+      );
+      print(
+        'Recurring task completion notification sent: $taskTitle (ID: $uniqueId)',
+      );
+    } catch (e) {
+      print('Error sending recurring task completion notification: $e');
+    }
+  }
+
+  // Helper method to format completion date
+  String _formatCompletionDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final taskDate = DateTime(date.year, date.month, date.day);
+
+      if (taskDate.isAtSameMomentAs(today)) {
+        return 'today';
+      } else if (taskDate.isAtSameMomentAs(today.subtract(Duration(days: 1)))) {
+        return 'yesterday';
+      } else {
+        return '${date.day}/${date.month}/${date.year}';
+      }
+    } catch (e) {
+      return dateString;
     }
   }
 

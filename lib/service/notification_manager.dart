@@ -447,49 +447,112 @@ class NotificationManager {
   }
 
   // Handle task completion - Show first name instead of user ID
-  Future<void> _handleTaskCompletion(TaskModel task) async {
-    if (_currentUserId == null) return;
+Future<void> _handleTaskCompletion(TaskModel task) async {
+  if (_currentUserId == null) return;
 
-    print('Checking task completion: ${task.title}');
+  print('Checking task completion: ${task.title}');
 
-    // Check if task was completed by someone else
-    final lastCompletedBy = task.completedBy.isNotEmpty
-        ? task.completedBy.last
-        : null;
+  if (task.isRecurring) {
+    // RECURRING TASK COMPLETION HANDLING
+    await _handleRecurringTaskCompletion(task);
+  } else {
+    // SINGLE TASK COMPLETION HANDLING
+    await _handleSingleTaskCompletion(task);
+  }
+}
 
-    if (lastCompletedBy != null && lastCompletedBy.userId != _currentUserId) {
-      print('Task completed by: ${lastCompletedBy.userId}');
+Future<void> _handleSingleTaskCompletion(TaskModel task) async {
+  // Check if task was completed by someone else
+  final lastCompletedBy = task.completedBy.isNotEmpty
+      ? task.completedBy.last
+      : null;
 
-      try {
-        final eventDoc = await _firestore
-            .collection('events')
-            .doc(task.eventId)
-            .get();
-        if (eventDoc.exists) {
-          final event = EventModel.fromFirestore(eventDoc);
+  if (lastCompletedBy != null && lastCompletedBy.userId != _currentUserId) {
+    print('Single task completed by: ${lastCompletedBy.userId}');
 
-          // Check if current user should be notified (admin only for task completion)
-          final isAdmin = event.isUserAdmin(_currentUserId!);
+    try {
+      final eventDoc = await _firestore
+          .collection('events')
+          .doc(task.eventId)
+          .get();
+      if (eventDoc.exists) {
+        final event = EventModel.fromFirestore(eventDoc);
 
-          if (isAdmin) {
-            print('Sending completion notification to admin');
+        // Check if current user should be notified (admin only for task completion)
+        final isAdmin = event.isUserAdmin(_currentUserId!);
 
-            // Get the first name of the person who completed the task
-            String completedByFirstName = await _getFirstName(lastCompletedBy.userId);
+        if (isAdmin) {
+          print('Sending completion notification to admin');
 
-            await _notificationService.showTaskCompletedNotification(
-              taskTitle: task.title,
-              completedByFirstName: completedByFirstName,
-              eventTitle: event.title,
-              taskId: task.id,
-            );
-          }
+          // Get the first name of the person who completed the task
+          String completedByFirstName = await _getFirstName(lastCompletedBy.userId);
+
+          await _notificationService.showTaskCompletedNotification(
+            taskTitle: task.title,
+            completedByFirstName: completedByFirstName,
+            eventTitle: event.title,
+            taskId: task.id,
+          );
         }
-      } catch (e) {
-        print('Error sending task completion notification: $e');
       }
+    } catch (e) {
+      print('Error sending task completion notification: $e');
     }
   }
+}
+
+// Handle recurring task completion (NEW)
+Future<void> _handleRecurringTaskCompletion(TaskModel task) async {
+  try {
+    final eventDoc = await _firestore
+        .collection('events')
+        .doc(task.eventId)
+        .get();
+    if (!eventDoc.exists) return;
+
+    final event = EventModel.fromFirestore(eventDoc);
+    final isAdmin = event.isUserAdmin(_currentUserId!);
+
+    if (!isAdmin) return; // Only notify admins
+
+    // Check today's completions for new completions
+    final today = TaskModel.getTodayDateString();
+    final todayCompletion = task.dailyCompletions
+        .where((dc) => dc.date == today)
+        .firstOrNull;
+
+    if (todayCompletion == null || todayCompletion.completedBy.isEmpty) return;
+
+    // Check if there's a recent completion (within last 2 minutes) by someone else
+    final now = DateTime.now();
+    final recentCompletions = todayCompletion.completedBy.where((completion) {
+      final timeDiff = now.difference(completion.completedAt);
+      return timeDiff.inMinutes <= 2 && completion.userId != _currentUserId;
+    }).toList();
+
+    if (recentCompletions.isNotEmpty) {
+      // Get the most recent completion
+      final latestCompletion = recentCompletions.reduce((a, b) => 
+          a.completedAt.isAfter(b.completedAt) ? a : b);
+
+      print('Recurring task completed today by: ${latestCompletion.userId}');
+
+      // Get the first name of the person who completed the task
+      String completedByFirstName = await _getFirstName(latestCompletion.userId);
+
+      await _notificationService.showRecurringTaskCompletedNotification(
+        taskTitle: task.title,
+        completedByFirstName: completedByFirstName,
+        eventTitle: event.title,
+        taskId: task.id,
+        recurrenceType: task.recurrenceDisplayName,
+        completionDate: today,
+      );
+    }
+  } catch (e) {
+    print('Error sending recurring task completion notification: $e');
+  }
+}
 
   // Get first name from user ID
   Future<String> _getFirstName(String userId) async {
