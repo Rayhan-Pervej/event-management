@@ -23,6 +23,8 @@ class CreateTaskProvider extends ChangeNotifier {
   EventModel? _currentEvent;
   bool _isLoading = false;
   bool _isLoadingEvent = true;
+  bool _isRecurring = false;
+  RecurrenceType _selectedRecurrenceType = RecurrenceType.daily;
 
   // Getters
   DateTime? get selectedDate => _selectedDate;
@@ -32,7 +34,8 @@ class CreateTaskProvider extends ChangeNotifier {
   EventModel? get currentEvent => _currentEvent;
   bool get isLoading => _isLoading;
   bool get isLoadingEvent => _isLoadingEvent;
-
+  bool get isRecurring => _isRecurring;
+  RecurrenceType get selectedRecurrenceType => _selectedRecurrenceType;
   final List<String> priorities = ['low', 'medium', 'high'];
 
   @override
@@ -56,6 +59,21 @@ class CreateTaskProvider extends ChangeNotifier {
       _isLoadingEvent = false;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  String getRecurrenceDisplayName(RecurrenceType type) {
+    switch (type) {
+      case RecurrenceType.daily:
+        return 'Daily';
+      case RecurrenceType.weekly:
+        return 'Weekly';
+      case RecurrenceType.monthly:
+        return 'Monthly';
+      case RecurrenceType.yearly:
+        return 'Yearly';
+      case RecurrenceType.none:
+        return 'None';
     }
   }
 
@@ -154,10 +172,26 @@ class CreateTaskProvider extends ChangeNotifier {
     return null;
   }
 
+  void setIsRecurring(bool value) {
+    _isRecurring = value;
+    // Clear date/time when switching to recurring
+    if (_isRecurring) {
+      _selectedDate = null;
+      _selectedTime = null;
+    }
+    notifyListeners();
+  }
+
+  void setSelectedRecurrenceType(RecurrenceType type) {
+    _selectedRecurrenceType = type;
+    notifyListeners();
+  }
+
   bool validateForm() {
     if (!formKey.currentState!.validate()) return false;
 
-    if (_selectedDate == null || _selectedTime == null) {
+    // For single tasks, require date and time
+    if (!_isRecurring && (_selectedDate == null || _selectedTime == null)) {
       return false;
     }
 
@@ -175,13 +209,18 @@ class CreateTaskProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final deadline = DateTime(
-        _selectedDate!.year,
-        _selectedDate!.month,
-        _selectedDate!.day,
-        _selectedTime!.hour,
-        _selectedTime!.minute,
-      );
+      DateTime? deadline;
+
+      // Only set deadline for single tasks
+      if (!_isRecurring) {
+        deadline = DateTime(
+          _selectedDate!.year,
+          _selectedDate!.month,
+          _selectedDate!.day,
+          _selectedTime!.hour,
+          _selectedTime!.minute,
+        );
+      }
 
       final task = TaskModel(
         id: '',
@@ -190,12 +229,18 @@ class CreateTaskProvider extends ChangeNotifier {
         description: descriptionController.text.trim(),
         assignedToUsers: _selectedMembers,
         assignedToGroups: [],
-        deadline: deadline,
+        deadline: deadline, // null for recurring tasks
         status: 'pending',
         priority: _selectedPriority,
         completedBy: [],
         createdBy: currentUserId,
         createdAt: DateTime.now(),
+        // Recurring task fields
+        isRecurring: _isRecurring,
+        recurrenceType: _isRecurring
+            ? _selectedRecurrenceType
+            : RecurrenceType.none,
+        dailyCompletions: [],
       );
 
       await _tasksRepository.createTask(task);
@@ -244,6 +289,8 @@ class CreateTaskProvider extends ChangeNotifier {
     _selectedPriority = 'medium';
     _selectedMembers.clear();
     _currentEvent = null;
+    _isRecurring = false;
+    _selectedRecurrenceType = RecurrenceType.daily;
     _isLoading = false;
     _isLoadingEvent = true;
     notifyListeners();

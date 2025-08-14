@@ -27,6 +27,10 @@ class HomeProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // FIXED: Separate single and recurring tasks
+  List<TaskModel> get singleTasks => _allTasks.where((task) => !task.isRecurring).toList();
+  List<TaskModel> get recurringTasks => _allTasks.where((task) => task.isRecurring).toList();
+
   // Performance tracking for team members
   List<MemberPerformance> _topPerformers = [];
   List<MemberPerformance> _laggingMembers = [];
@@ -37,41 +41,90 @@ class HomeProvider with ChangeNotifier {
   List<MemberPerformance> get laggingMembers => _laggingMembers;
   double get teamCompletionRate => _teamCompletionRate;
 
-  // Admin overview stats
+  // FIXED: Admin overview stats (only count single tasks for completion status)
   int get totalActiveEvents => _userEvents.where((e) => !e.isCompleted).length;
-  int get totalActiveTasks => _allTasks.where((t) => !t.isCompleted).length;
-  int get totalOverdueTasks =>
-      _allTasks.where((t) => t.isOverdue && !t.isCompleted).length;
+  int get totalActiveTasks => singleTasks.where((t) => !t.isCompleted).length;
+  int get totalOverdueTasks => singleTasks.where((t) => t.isOverdue && !t.isCompleted).length;
+  
+  // NEW: Recurring task stats
+  int get totalRecurringTasks => recurringTasks.length;
+  int get recurringTasksCompletedToday {
+    if (_currentUserId == null) return 0;
+    return recurringTasks.where((task) => 
+      task.isAssignedToUser(_currentUserId!) && 
+      task.isCompletedToday(_currentUserId!)
+    ).length;
+  }
+  int get recurringTasksPendingToday {
+    if (_currentUserId == null) return 0;
+    return recurringTasks.where((task) => 
+      task.isAssignedToUser(_currentUserId!) && 
+      !task.isCompletedToday(_currentUserId!)
+    ).length;
+  }
 
-  // Member personal stats
+  // FIXED: Member personal stats
   int get myCompletedTasksThisWeek {
     if (_currentUserId == null) return 0;
     final weekAgo = DateTime.now().subtract(const Duration(days: 7));
-    return _allTasks
-        .where(
-          (task) =>
-              task.isCompletedByUser(_currentUserId!) &&
-              task.completedBy.any(
-                (completion) =>
-                    completion.userId == _currentUserId! &&
-                    completion.completedAt.isAfter(weekAgo),
-              ),
-        )
+    
+    int singleTasksCompleted = singleTasks
+        .where((task) =>
+            task.isCompletedByUser(_currentUserId!) &&
+            task.completedBy.any((completion) =>
+                completion.userId == _currentUserId! &&
+                completion.completedAt.isAfter(weekAgo)))
         .length;
+
+    // For recurring tasks, count completions in the last week
+    int recurringTasksCompleted = 0;
+    for (var task in recurringTasks.where((t) => t.isAssignedToUser(_currentUserId!))) {
+      final userCompletions = task.getCompletionDatesForUser(_currentUserId!);
+      for (var dateStr in userCompletions) {
+        try {
+          final date = DateTime.parse(dateStr);
+          if (date.isAfter(weekAgo)) {
+            recurringTasksCompleted++;
+          }
+        } catch (e) {
+          // Skip invalid date strings
+          continue;
+        }
+      }
+    }
+
+    return singleTasksCompleted + recurringTasksCompleted;
   }
 
   int get myActiveEvents => _userEvents.where((e) => !e.isCompleted).length;
 
+  // FIXED: My completion rate (includes both single and recurring tasks)
   double get myCompletionRate {
     if (_currentUserId == null) return 0.0;
-    final myTasks = _allTasks
+    
+    final mySingleTasks = singleTasks
         .where((task) => task.isAssignedToUser(_currentUserId!))
         .toList();
-    if (myTasks.isEmpty) return 0.0;
-    final completedTasks = myTasks
+    final myRecurringTasks = recurringTasks
+        .where((task) => task.isAssignedToUser(_currentUserId!))
+        .toList();
+
+    if (mySingleTasks.isEmpty && myRecurringTasks.isEmpty) return 0.0;
+
+    // Count completed single tasks
+    final completedSingleTasks = mySingleTasks
         .where((task) => task.isCompletedByUser(_currentUserId!))
         .length;
-    return (completedTasks / myTasks.length) * 100;
+
+    // Count recurring tasks completed today
+    final completedRecurringTasksToday = myRecurringTasks
+        .where((task) => task.isCompletedToday(_currentUserId!))
+        .length;
+
+    final totalTasks = mySingleTasks.length + myRecurringTasks.length;
+    final totalCompleted = completedSingleTasks + completedRecurringTasksToday;
+
+    return (totalCompleted / totalTasks) * 100;
   }
 
   // Load home data
@@ -125,7 +178,16 @@ class HomeProvider with ChangeNotifier {
       for (var task in _allTasks) {
         allUserIds.addAll(task.assignedToUsers);
         allUserIds.add(task.createdBy);
-        allUserIds.addAll(task.completedBy.map((c) => c.userId));
+        
+        // For single tasks
+        if (!task.isRecurring) {
+          allUserIds.addAll(task.completedBy.map((c) => c.userId));
+        } else {
+          // For recurring tasks
+          for (var dailyCompletion in task.dailyCompletions) {
+            allUserIds.addAll(dailyCompletion.completedBy.map((c) => c.userId));
+          }
+        }
       }
 
       // Fetch user data from Firestore
@@ -148,6 +210,7 @@ class HomeProvider with ChangeNotifier {
     }
   }
 
+  // FIXED: Calculate team performance (handles both single and recurring tasks)
   Future<void> _calculateTeamPerformance(String userId) async {
     try {
       // Get only events where user is admin
@@ -178,33 +241,39 @@ class HomeProvider with ChangeNotifier {
       List<MemberPerformance> allPerformances = [];
 
       for (String memberId in teamMemberIds) {
-        // REMOVED: if (memberId == userId) continue; // Now include admin
-
         final memberTasks = adminTasks
             .where((task) => task.isAssignedToUser(memberId))
             .toList();
         if (memberTasks.isEmpty) continue;
 
-        final completedTasks = memberTasks
+        // Separate single and recurring tasks
+        final singleMemberTasks = memberTasks.where((t) => !t.isRecurring).toList();
+        final recurringMemberTasks = memberTasks.where((t) => t.isRecurring).toList();
+
+        // Calculate for single tasks
+        final completedSingleTasks = singleMemberTasks
             .where((task) => task.isCompletedByUser(memberId))
             .length;
-        final overdueTasks = memberTasks
-            .where(
-              (task) => task.isOverdue && !task.isCompletedByUser(memberId),
-            )
+        final overdueSingleTasks = singleMemberTasks
+            .where((task) => task.isOverdue && !task.isCompletedByUser(memberId))
             .length;
-        final onTimeTasks = memberTasks
-            .where(
-              (task) => task.isCompletedByUser(memberId) && !task.isOverdue,
-            )
+        final onTimeSingleTasks = singleMemberTasks
+            .where((task) => task.isCompletedByUser(memberId) && !task.isOverdue)
             .length;
 
-        final completionRate = memberTasks.isNotEmpty
-            ? (completedTasks / memberTasks.length) * 100
-            : 0.0;
-        final onTimeRate = memberTasks.isNotEmpty
-            ? (onTimeTasks / memberTasks.length) * 100
-            : 0.0;
+        // Calculate for recurring tasks (use today's completion)
+        final completedRecurringTasksToday = recurringMemberTasks
+            .where((task) => task.isCompletedToday(memberId))
+            .length;
+
+        // Total calculations
+        final totalTasks = singleMemberTasks.length + recurringMemberTasks.length;
+        final totalCompleted = completedSingleTasks + completedRecurringTasksToday;
+        final totalOverdue = overdueSingleTasks; // Recurring tasks don't have overdue concept
+        final totalOnTime = onTimeSingleTasks + completedRecurringTasksToday;
+
+        final completionRate = totalTasks > 0 ? (totalCompleted / totalTasks) * 100 : 0.0;
+        final onTimeRate = totalTasks > 0 ? (totalOnTime / totalTasks) * 100 : 0.0;
 
         final user = _usersMap[memberId];
         if (user != null) {
@@ -215,9 +284,9 @@ class HomeProvider with ChangeNotifier {
               lastName: user.lastName,
               completionRate: completionRate,
               onTimeRate: onTimeRate,
-              totalTasks: memberTasks.length,
-              completedTasks: completedTasks,
-              overdueTasks: overdueTasks,
+              totalTasks: totalTasks,
+              completedTasks: totalCompleted,
+              overdueTasks: totalOverdue,
             ),
           );
         }
@@ -266,38 +335,58 @@ class HomeProvider with ChangeNotifier {
     return _userEvents.where((event) => event.isUserMember(userId)).toList();
   }
 
-  // Get urgent tasks for member view
+  // FIXED: Get urgent tasks for member view (only single tasks can be urgent)
   List<TaskModel> getUrgentTasks(String userId) {
-    final myTasks = _allTasks
-        .where(
-          (task) =>
-              task.isAssignedToUser(userId) && !task.isCompletedByUser(userId),
-        )
+    final mySingleTasks = singleTasks
+        .where((task) =>
+            task.isAssignedToUser(userId) && !task.isCompletedByUser(userId))
         .toList();
 
     // Sort by urgency (overdue first, then by deadline)
-    myTasks.sort((a, b) {
+    mySingleTasks.sort((a, b) {
       if (a.isOverdue && !b.isOverdue) return -1;
       if (!a.isOverdue && b.isOverdue) return 1;
-      return a.deadline.compareTo(b.deadline);
+      if (a.deadline != null && b.deadline != null) {
+        return a.deadline!.compareTo(b.deadline!);
+      }
+      return 0;
     });
 
-    return myTasks.take(3).toList(); // Return top 3 most urgent
+    return mySingleTasks.take(3).toList(); // Return top 3 most urgent
   }
 
-  // Get recent activity
+  // NEW: Get pending recurring tasks for today
+  List<TaskModel> getPendingRecurringTasksToday(String userId) {
+    return recurringTasks
+        .where((task) => 
+            task.isAssignedToUser(userId) && 
+            !task.isCompletedToday(userId))
+        .take(3)
+        .toList();
+  }
+
+  // NEW: Get completed recurring tasks for today
+  List<TaskModel> getCompletedRecurringTasksToday(String userId) {
+    return recurringTasks
+        .where((task) => 
+            task.isAssignedToUser(userId) && 
+            task.isCompletedToday(userId))
+        .toList();
+  }
+
+  // FIXED: Get recent activity (handles both single and recurring tasks)
   List<ActivityItem> getRecentActivity() {
     List<ActivityItem> activities = [];
+    final dayAgo = DateTime.now().subtract(const Duration(days: 1));
 
-    // Add recent task completions
-    final recentCompletions = _allTasks.where((task) {
+    // Add recent single task completions
+    final recentSingleCompletions = singleTasks.where((task) {
       if (task.completedBy.isEmpty) return false;
       final lastCompletion = task.completedBy.last;
-      final dayAgo = DateTime.now().subtract(const Duration(days: 1));
       return lastCompletion.completedAt.isAfter(dayAgo);
     }).toList();
 
-    for (var task in recentCompletions.take(5)) {
+    for (var task in recentSingleCompletions.take(3)) {
       final completion = task.completedBy.last;
       final user = _usersMap[completion.userId];
       if (user != null) {
@@ -311,10 +400,76 @@ class HomeProvider with ChangeNotifier {
       }
     }
 
-    // Sort by timestamp
+    // Add recent recurring task completions
+    for (var task in recurringTasks.take(10)) { // Limit to avoid too much processing
+      for (var dailyCompletion in task.dailyCompletions) {
+        for (var completion in dailyCompletion.completedBy) {
+          if (completion.completedAt.isAfter(dayAgo)) {
+            final user = _usersMap[completion.userId];
+            if (user != null) {
+              activities.add(
+                ActivityItem(
+                  type: 'recurring_task_completed',
+                  message: '${user.firstName} completed "${task.title}" (${dailyCompletion.date})',
+                  timestamp: completion.completedAt,
+                ),
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Sort by timestamp and limit
     activities.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     return activities.take(5).toList();
+  }
+
+  // NEW: Get today's completion statistics
+  Map<String, int> getTodayCompletionStats(String userId) {
+    final today = TaskModel.getTodayDateString();
+    
+    final myRecurringTasks = recurringTasks
+        .where((task) => task.isAssignedToUser(userId))
+        .toList();
+    
+    final completedToday = myRecurringTasks
+        .where((task) => task.isCompletedToday(userId))
+        .length;
+    
+    final pendingToday = myRecurringTasks.length - completedToday;
+    
+    return {
+      'completed': completedToday,
+      'pending': pendingToday,
+      'total': myRecurringTasks.length,
+    };
+  }
+
+  // NEW: Get weekly completion history for recurring tasks
+  Map<String, int> getWeeklyRecurringTaskStats(String userId) {
+    final now = DateTime.now();
+    Map<String, int> weeklyStats = {};
+    
+    // Initialize last 7 days
+    for (int i = 6; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      weeklyStats[dateStr] = 0;
+    }
+    
+    // Count completions for each day
+    for (var task in recurringTasks.where((t) => t.isAssignedToUser(userId))) {
+      final userCompletions = task.getCompletionDatesForUser(userId);
+      for (var dateStr in userCompletions) {
+        if (weeklyStats.containsKey(dateStr)) {
+          weeklyStats[dateStr] = weeklyStats[dateStr]! + 1;
+        }
+      }
+    }
+    
+    return weeklyStats;
   }
 
   // Refresh data

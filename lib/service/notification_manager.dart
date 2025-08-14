@@ -542,86 +542,257 @@ class NotificationManager {
   }
 
   // Enhanced task reminders - Called every 1 minute from main.dart
-  Future<void> checkTaskReminders() async {
-    if (_currentUserId == null) return;
+// Enhanced task reminders - Called every 1 minute from main.dart
+Future<void> checkTaskReminders() async {
+  if (_currentUserId == null) return;
 
-    try {
-      // Get user's events
-      final userEvents = await _getUserEvents();
-      final userEventIds = userEvents.map((e) => e.id).toList();
+  try {
+    // Get user's events
+    final userEvents = await _getUserEvents();
+    final userEventIds = userEvents.map((e) => e.id).toList();
 
-      if (userEventIds.isEmpty) return;
+    if (userEventIds.isEmpty) return;
 
-      // Get all incomplete tasks in user's events
-      final tasksSnapshot = await _firestore
-          .collection('tasks')
-          .where('eventId', whereIn: userEventIds)
-          .where('status', whereIn: ['pending', 'in_progress'])
-          .get();
+    // Get all tasks in user's events
+    final tasksSnapshot = await _firestore
+        .collection('tasks')
+        .where('eventId', whereIn: userEventIds)
+        .get();
 
-      final now = DateTime.now();
+    final now = DateTime.now();
 
-      for (var doc in tasksSnapshot.docs) {
-        final task = TaskModel.fromFirestore(doc);
-        final timeToDue = task.deadline.difference(now);
-        final event = userEvents.firstWhere((e) => e.id == task.eventId);
+    for (var doc in tasksSnapshot.docs) {
+      final task = TaskModel.fromFirestore(doc);
+      final event = userEvents.firstWhere((e) => e.id == task.eventId);
 
-        // Check if user is assigned to this task
-        final isAssigned = task.isAssignedToUser(_currentUserId!);
-        final isAdmin = event.isUserAdmin(_currentUserId!);
+      // Check if user is assigned to this task
+      final isAssigned = task.isAssignedToUser(_currentUserId!);
+      final isAdmin = event.isUserAdmin(_currentUserId!);
 
-        // MEMBER NOTIFICATIONS
-        if (isAssigned) {
-          // Due soon notification (within 1 hour) - EVERY 1 MINUTE
-          if (timeToDue.inHours <= 1 && timeToDue.inMinutes > 0) {
-            await _notificationService.showTaskDueSoonNotification(
-              taskTitle: task.title,
-              eventTitle: event.title,
-              taskId: task.id,
-              minutesLeft: timeToDue.inMinutes,
-            );
-          }
-
-          // Overdue notification - EVERY 1 MINUTE
-          if (timeToDue.isNegative) {
-            await _notificationService.showTaskOverdueNotification(
-              taskTitle: task.title,
-              eventTitle: event.title,
-              taskId: task.id,
-              hoursOverdue: (-timeToDue.inHours),
-            );
-          }
-        }
-
-        // ADMIN NOTIFICATIONS
-        if (isAdmin) {
-          // Admin due soon notification (within 1 hour) - EVERY 1 MINUTE
-          if (timeToDue.inHours <= 1 && timeToDue.inMinutes > 0) {
-            await _notificationService.showAdminTaskDueSoonNotification(
-              taskTitle: task.title,
-              eventTitle: event.title,
-              taskId: task.id,
-              assignedToCount: task.assignedToUsers.length,
-              minutesLeft: timeToDue.inMinutes,
-            );
-          }
-
-          // Admin overdue notification - EVERY 1 MINUTE
-          if (timeToDue.isNegative) {
-            await _notificationService.showAdminTaskOverdueNotification(
-              taskTitle: task.title,
-              eventTitle: event.title,
-              taskId: task.id,
-              assignedToCount: task.assignedToUsers.length,
-              hoursOverdue: (-timeToDue.inHours),
-            );
-          }
-        }
+      if (task.isRecurring) {
+        // RECURRING TASK NOTIFICATIONS
+        await _handleRecurringTaskReminders(task, event, isAssigned, isAdmin);
+      } else {
+        // SINGLE TASK NOTIFICATIONS
+        await _handleSingleTaskReminders(task, event, isAssigned, isAdmin, now);
       }
-    } catch (e) {
-      print('Error checking task reminders: $e');
+    }
+  } catch (e) {
+    print('Error checking task reminders: $e');
+  }
+}
+// Handle reminders for single tasks
+Future<void> _handleSingleTaskReminders(
+  TaskModel task,
+  EventModel event,
+  bool isAssigned,
+  bool isAdmin,
+  DateTime now,
+) async {
+  // Skip if task is completed or has no deadline
+  if (task.isCompleted || task.deadline == null) return;
+
+  final timeToDue = task.deadline!.difference(now);
+
+  // MEMBER NOTIFICATIONS
+  if (isAssigned) {
+    // Check if user has already completed this task
+    if (task.isCompletedByUser(_currentUserId!)) return;
+
+    // Due soon notification (within 1 hour)
+    if (timeToDue.inHours <= 1 && timeToDue.inMinutes > 0) {
+      await _notificationService.showTaskDueSoonNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        minutesLeft: timeToDue.inMinutes,
+      );
+    }
+
+    // Overdue notification
+    if (timeToDue.isNegative) {
+      await _notificationService.showTaskOverdueNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        hoursOverdue: (-timeToDue.inHours),
+      );
     }
   }
+
+  // ADMIN NOTIFICATIONS
+  if (isAdmin) {
+    // Admin due soon notification
+    if (timeToDue.inHours <= 1 && timeToDue.inMinutes > 0) {
+      await _notificationService.showAdminTaskDueSoonNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        assignedToCount: task.assignedToUsers.length,
+        minutesLeft: timeToDue.inMinutes,
+      );
+    }
+
+    // Admin overdue notification
+    if (timeToDue.isNegative) {
+      await _notificationService.showAdminTaskOverdueNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        assignedToCount: task.assignedToUsers.length,
+        hoursOverdue: (-timeToDue.inHours),
+      );
+    }
+  }
+}
+
+// Handle reminders for recurring tasks
+Future<void> _handleRecurringTaskReminders(
+  TaskModel task,
+  EventModel event,
+  bool isAssigned,
+  bool isAdmin,
+) async {
+  final now = DateTime.now();
+  final today = TaskModel.getTodayDateString();
+
+  // MEMBER NOTIFICATIONS FOR RECURRING TASKS
+  if (isAssigned) {
+    // Check if user has already completed this task today
+    if (task.isCompletedToday(_currentUserId!)) return;
+
+    // Daily reminder for recurring tasks
+    await _sendRecurringTaskReminder(task, event, now);
+  }
+
+  // ADMIN NOTIFICATIONS FOR RECURRING TASKS
+  if (isAdmin) {
+    // Admin notification for recurring tasks not completed by team
+    await _sendAdminRecurringTaskReminder(task, event, today);
+  }
+}
+
+// Send recurring task reminder based on time and recurrence type
+Future<void> _sendRecurringTaskReminder(
+  TaskModel task,
+  EventModel event,
+  DateTime now,
+) async {
+  final hour = now.hour;
+  final minute = now.minute;
+
+  bool shouldSendReminder = false;
+  String reminderType = '';
+
+  switch (task.recurrenceType) {
+    case RecurrenceType.daily:
+      // Morning reminder at 9:00 AM
+      if (hour == 9 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'morning';
+      }
+      // Afternoon reminder at 2:00 PM
+      else if (hour == 14 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'afternoon';
+      }
+      // Evening reminder at 6:00 PM
+      else if (hour == 18 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'evening';
+      }
+      break;
+
+    case RecurrenceType.weekly:
+      // Weekly reminder on Monday at 10:00 AM
+      if (now.weekday == DateTime.monday && hour == 10 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'weekly';
+      }
+      break;
+
+    case RecurrenceType.monthly:
+      // Monthly reminder on 1st day at 9:00 AM
+      if (now.day == 1 && hour == 9 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'monthly';
+      }
+      break;
+
+    case RecurrenceType.yearly:
+      // Yearly reminder on January 1st at 9:00 AM
+      if (now.month == 1 && now.day == 1 && hour == 9 && minute == 0) {
+        shouldSendReminder = true;
+        reminderType = 'yearly';
+      }
+      break;
+
+    case RecurrenceType.none:
+      break;
+  }
+
+  if (shouldSendReminder) {
+    await _notificationService.showRecurringTaskReminderNotification(
+      taskTitle: task.title,
+      eventTitle: event.title,
+      taskId: task.id,
+      recurrenceType: task.recurrenceDisplayName,
+      reminderType: reminderType,
+    );
+  }
+}
+
+// Send admin notification for recurring tasks
+Future<void> _sendAdminRecurringTaskReminder(
+  TaskModel task,
+  EventModel event,
+  String today,
+) async {
+  final now = DateTime.now();
+  final hour = now.hour;
+  final minute = now.minute;
+
+  // Admin check at 11:00 AM for daily recurring tasks
+  if (task.recurrenceType == RecurrenceType.daily && hour == 11 && minute == 0) {
+    final completedCount = task.getCompletionCountForDate(today);
+    final totalAssigned = task.assignedToUsers.length;
+    final pendingCount = totalAssigned - completedCount;
+
+    if (pendingCount > 0) {
+      await _notificationService.showAdminRecurringTaskStatusNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        completedCount: completedCount,
+        totalCount: totalAssigned,
+        pendingCount: pendingCount,
+        recurrenceType: task.recurrenceDisplayName,
+      );
+    }
+  }
+
+  // Admin check at 5:00 PM for weekly recurring tasks (on Fridays)
+  if (task.recurrenceType == RecurrenceType.weekly && 
+      now.weekday == DateTime.friday && 
+      hour == 17 && 
+      minute == 0) {
+    final completedCount = task.getCompletionCountForDate(today);
+    final totalAssigned = task.assignedToUsers.length;
+    final pendingCount = totalAssigned - completedCount;
+
+    if (pendingCount > 0) {
+      await _notificationService.showAdminRecurringTaskStatusNotification(
+        taskTitle: task.title,
+        eventTitle: event.title,
+        taskId: task.id,
+        completedCount: completedCount,
+        totalCount: totalAssigned,
+        pendingCount: pendingCount,
+        recurrenceType: task.recurrenceDisplayName,
+      );
+    }
+  }
+}
 
   // Public method to manually check connection health
   Future<void> ensureConnectionHealth() async {

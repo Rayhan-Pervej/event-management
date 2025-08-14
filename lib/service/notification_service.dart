@@ -8,7 +8,8 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
   bool _isInitialized = false;
   bool _permissionsRequested = false;
 
@@ -17,7 +18,9 @@ class NotificationService {
     if (_isInitialized) return;
 
     try {
-      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
@@ -39,10 +42,10 @@ class NotificationService {
           await _requestPermissions();
           _permissionsRequested = true;
         }
-        
+
         // Create notification channels for better compatibility on ALL Android phones
         await _createNotificationChannels();
-        
+
         _isInitialized = true;
         print('Notifications initialized successfully');
       } else {
@@ -56,7 +59,10 @@ class NotificationService {
 
   // Create notification channels with proper configuration for ALL Android devices
   Future<void> _createNotificationChannels() async {
-    final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidImplementation = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImplementation != null) {
       // High importance channels for critical notifications
       const highImportanceChannel = AndroidNotificationChannel(
@@ -154,16 +160,55 @@ class NotificationService {
         ledColor: Color(0xFFFF9800),
         showBadge: true,
       );
-
+      const recurringTaskRemindersChannel = AndroidNotificationChannel(
+        'recurring_task_reminders',
+        'Recurring Task Reminders',
+        description: 'Reminders for recurring tasks',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF673AB7),
+        showBadge: true,
+      );
+      const adminRecurringStatusChannel = AndroidNotificationChannel(
+        'admin_recurring_status',
+        'Admin: Recurring Task Status',
+        description: 'Status updates for recurring tasks',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFF795548),
+        showBadge: true,
+      );
+      await androidImplementation.createNotificationChannel(
+        recurringTaskRemindersChannel,
+      );
+      await androidImplementation.createNotificationChannel(
+        adminRecurringStatusChannel,
+      );
       // Create all channels
-      await androidImplementation.createNotificationChannel(highImportanceChannel);
-      await androidImplementation.createNotificationChannel(taskAssignmentChannel);
+      await androidImplementation.createNotificationChannel(
+        highImportanceChannel,
+      );
+      await androidImplementation.createNotificationChannel(
+        taskAssignmentChannel,
+      );
       await androidImplementation.createNotificationChannel(taskDueSoonChannel);
       await androidImplementation.createNotificationChannel(taskOverdueChannel);
-      await androidImplementation.createNotificationChannel(taskCompletionChannel);
-      await androidImplementation.createNotificationChannel(eventInvitationChannel);
-      await androidImplementation.createNotificationChannel(adminOverdueChannel);
-      await androidImplementation.createNotificationChannel(adminDueSoonChannel);
+      await androidImplementation.createNotificationChannel(
+        taskCompletionChannel,
+      );
+      await androidImplementation.createNotificationChannel(
+        eventInvitationChannel,
+      );
+      await androidImplementation.createNotificationChannel(
+        adminOverdueChannel,
+      );
+      await androidImplementation.createNotificationChannel(
+        adminDueSoonChannel,
+      );
 
       print('All notification channels created successfully');
     }
@@ -172,13 +217,20 @@ class NotificationService {
   // Request notification permissions
   Future<void> _requestPermissions() async {
     try {
-      final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      final androidImplementation = _notifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (androidImplementation != null) {
-        final granted = await androidImplementation.requestNotificationsPermission();
+        final granted = await androidImplementation
+            .requestNotificationsPermission();
         print('Android notification permission granted: $granted');
       }
 
-      final iosImplementation = _notifications.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+      final iosImplementation = _notifications
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       if (iosImplementation != null) {
         final granted = await iosImplementation.requestPermissions(
           alert: true,
@@ -264,10 +316,12 @@ class NotificationService {
 
     final role = isAdmin ? 'admin' : 'member';
     final body = '$invitedBy added you as $role to "$eventTitle"';
-    
+
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '🎉 Event Invitation', // This will show on ALL Android phones
@@ -275,7 +329,7 @@ class NotificationService {
         notificationDetails,
         payload: 'event:$eventId',
       );
-      
+
       // Mark as notified
       await _markAsNotified('event_invitation', eventId);
       await _logNotification('Event Invitation', eventTitle, 'N/A');
@@ -302,7 +356,8 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'task_assignments',
       'Task Assignments',
-      channelDescription: 'Immediate notifications when you are assigned to tasks',
+      channelDescription:
+          'Immediate notifications when you are assigned to tasks',
       importance: Importance.max,
       priority: Priority.max,
       icon: '@mipmap/ic_launcher',
@@ -347,8 +402,10 @@ class NotificationService {
     final body = 'You have been assigned to "$taskTitle" in $eventTitle';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '📋 New Task Assigned', // This will show on ALL Android phones
@@ -356,7 +413,7 @@ class NotificationService {
         notificationDetails,
         payload: 'task:$taskId',
       );
-      
+
       // Mark as notified
       await _markAsNotified('task_assignment', taskId);
       await _logNotification('Task Assignment', taskTitle, eventTitle);
@@ -426,8 +483,10 @@ class NotificationService {
     final body = '"$taskTitle" in $eventTitle is due in $minutesLeft minutes';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '⏰ Task Due Soon!', // This will show on ALL Android phones
@@ -435,7 +494,7 @@ class NotificationService {
         notificationDetails,
         payload: 'task:$taskId',
       );
-      
+
       await _logNotification('Task Due Soon', taskTitle, eventTitle);
       print('Task due soon notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -497,15 +556,17 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    String overdueText = hoursOverdue < 24 
-        ? '$hoursOverdue hours overdue' 
+    String overdueText = hoursOverdue < 24
+        ? '$hoursOverdue hours overdue'
         : '${(hoursOverdue / 24).floor()} days overdue';
 
     final body = '"$taskTitle" in $eventTitle is $overdueText';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '🚨 Task Overdue!', // This will show on ALL Android phones
@@ -513,7 +574,7 @@ class NotificationService {
         notificationDetails,
         payload: 'task:$taskId',
       );
-      
+
       await _logNotification('Task Overdue', taskTitle, eventTitle);
       print('Task overdue notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -580,8 +641,10 @@ class NotificationService {
     final body = '$completedByFirstName completed "$taskTitle" in $eventTitle';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '✅ Task Completed', // This will show on ALL Android phones
@@ -589,7 +652,7 @@ class NotificationService {
         notificationDetails,
         payload: 'task:$taskId',
       );
-      
+
       await _logNotification('Task Completion', taskTitle, eventTitle);
       print('Task completion notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -610,7 +673,8 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'admin_overdue',
       'Admin: Overdue Tasks',
-      channelDescription: 'Critical notifications for admins about overdue tasks',
+      channelDescription:
+          'Critical notifications for admins about overdue tasks',
       importance: Importance.max,
       priority: Priority.max,
       icon: '@mipmap/ic_launcher',
@@ -652,19 +716,21 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    String overdueText = hoursOverdue < 24 
-        ? '$hoursOverdue hours overdue' 
+    String overdueText = hoursOverdue < 24
+        ? '$hoursOverdue hours overdue'
         : '${(hoursOverdue / 24).floor()} days overdue';
-    
-    String assignedText = assignedToCount > 1 
-        ? 'assigned to $assignedToCount people' 
+
+    String assignedText = assignedToCount > 1
+        ? 'assigned to $assignedToCount people'
         : 'assigned to 1 person';
 
     final body = '"$taskTitle" in $eventTitle ($assignedText) is $overdueText';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '🚨 Admin Alert: Task Overdue', // This will show on ALL Android phones
@@ -672,7 +738,7 @@ class NotificationService {
         notificationDetails,
         payload: 'admin_task:$taskId',
       );
-      
+
       await _logNotification('Admin Overdue Alert', taskTitle, eventTitle);
       print('Admin overdue notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -738,15 +804,18 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    String assignedText = assignedToCount > 1 
-        ? 'assigned to $assignedToCount people' 
+    String assignedText = assignedToCount > 1
+        ? 'assigned to $assignedToCount people'
         : 'assigned to 1 person';
 
-    final body = '"$taskTitle" in $eventTitle ($assignedText) is due in $minutesLeft minutes';
+    final body =
+        '"$taskTitle" in $eventTitle ($assignedText) is due in $minutesLeft minutes';
 
     try {
-      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(2147483647);
-      
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
       await _notifications.show(
         uniqueId,
         '⏰ Admin Alert: Task Due Soon', // This will show on ALL Android phones
@@ -754,7 +823,7 @@ class NotificationService {
         notificationDetails,
         payload: 'admin_task:$taskId',
       );
-      
+
       await _logNotification('Admin Due Soon Alert', taskTitle, eventTitle);
       print('Admin due soon notification sent: $taskTitle (ID: $uniqueId)');
     } catch (e) {
@@ -790,15 +859,141 @@ class NotificationService {
       final logs = prefs.getStringList('notification_logs') ?? [];
       final timestamp = DateTime.now().toIso8601String();
       logs.add('$timestamp - $type: $title in $event');
-      
+
       // Keep only last 100 logs
       if (logs.length > 100) {
         logs.removeRange(0, logs.length - 100);
       }
-      
+
       await prefs.setStringList('notification_logs', logs);
     } catch (e) {
       print('Error logging notification: $e');
+    }
+  }
+
+  // Show recurring task reminder notification
+  Future<void> showRecurringTaskReminderNotification({
+    required String taskTitle,
+    required String eventTitle,
+    required String taskId,
+    required String recurrenceType,
+    required String reminderType,
+  }) async {
+    if (!_isInitialized) return;
+
+    const androidDetails = AndroidNotificationDetails(
+      'recurring_task_reminders',
+      'Recurring Task Reminders',
+      channelDescription: 'Reminders for recurring tasks',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+      color: Color(0xFF673AB7),
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '🔄 Recurring Task Reminder',
+        summaryText: 'Event Management App',
+      ),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final body =
+        '$recurrenceType task "$taskTitle" in $eventTitle ($reminderType reminder)';
+
+    try {
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
+      await _notifications.show(
+        uniqueId,
+        '🔄 Recurring Task Reminder',
+        body,
+        notificationDetails,
+        payload: 'recurring_task:$taskId',
+      );
+
+      await _logNotification('Recurring Task Reminder', taskTitle, eventTitle);
+      print('Recurring task reminder sent: $taskTitle (ID: $uniqueId)');
+    } catch (e) {
+      print('Error sending recurring task reminder: $e');
+    }
+  }
+
+  // Show admin recurring task status notification
+  Future<void> showAdminRecurringTaskStatusNotification({
+    required String taskTitle,
+    required String eventTitle,
+    required String taskId,
+    required int completedCount,
+    required int totalCount,
+    required int pendingCount,
+    required String recurrenceType,
+  }) async {
+    if (!_isInitialized) return;
+
+    const androidDetails = AndroidNotificationDetails(
+      'admin_recurring_status',
+      'Admin: Recurring Task Status',
+      channelDescription: 'Status updates for recurring tasks',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+      color: Color(0xFF795548),
+      styleInformation: BigTextStyleInformation(
+        '',
+        contentTitle: '📊 Admin: Recurring Task Status',
+        summaryText: 'Event Management App',
+      ),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final body =
+        '$recurrenceType task "$taskTitle" in $eventTitle: $completedCount/$totalCount completed ($pendingCount pending)';
+
+    try {
+      final uniqueId = DateTime.now().millisecondsSinceEpoch.remainder(
+        2147483647,
+      );
+
+      await _notifications.show(
+        uniqueId,
+        '📊 Admin: Recurring Task Status',
+        body,
+        notificationDetails,
+        payload: 'admin_recurring:$taskId',
+      );
+
+      await _logNotification('Admin Recurring Status', taskTitle, eventTitle);
+      print('Admin recurring task status sent: $taskTitle (ID: $uniqueId)');
+    } catch (e) {
+      print('Error sending admin recurring task status: $e');
     }
   }
 
@@ -848,15 +1043,18 @@ class NotificationService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userEnabled = prefs.getBool('notifications_enabled') ?? true;
-      
+
       if (!userEnabled) return false;
-      
-      final androidImplementation = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+      final androidImplementation = _notifications
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (androidImplementation != null) {
         final granted = await androidImplementation.areNotificationsEnabled();
         return granted ?? false;
       }
-      
+
       return true;
     } catch (e) {
       print('Error checking notification permissions: $e');

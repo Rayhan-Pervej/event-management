@@ -35,6 +35,42 @@ class TasksRepository {
     }
   }
 
+  // Get Single Tasks by Event ID
+  Future<List<TaskModel>> getSingleTasksByEventId(String eventId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to fetch single tasks: $e');
+    }
+  }
+
+  // Get Recurring Tasks by Event ID
+  Future<List<TaskModel>> getRecurringTasksByEventId(String eventId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to fetch recurring tasks: $e');
+    }
+  }
+
   // Get Task by ID
   Future<TaskModel?> getTaskById(String taskId) async {
     try {
@@ -65,8 +101,44 @@ class TasksRepository {
     }
   }
 
-  // Complete Task
-  Future<bool> completeTask(String taskId, String userId) async {
+  // Get User Single Tasks
+  Future<List<TaskModel>> getUserSingleTasks(String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedToUsers', arrayContains: userId)
+          .where('isRecurring', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to fetch user single tasks: $e');
+    }
+  }
+
+  // Get User Recurring Tasks
+  Future<List<TaskModel>> getUserRecurringTasks(String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedToUsers', arrayContains: userId)
+          .where('isRecurring', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to fetch user recurring tasks: $e');
+    }
+  }
+
+  // Complete Task (handles both single and recurring)
+  Future<bool> completeTask(String taskId, String userId, {String? date}) async {
     try {
       final taskDoc = await _firestore.collection(_collection).doc(taskId).get();
       if (!taskDoc.exists) return false;
@@ -78,43 +150,91 @@ class TasksRepository {
         throw Exception('User is not assigned to this task');
       }
 
-      // Check if user already completed this task
-      if (task.isCompletedByUser(userId)) {
-        return true; // Already completed
+      if (task.isRecurring) {
+        return _completeRecurringTask(task, userId, date ?? TaskModel.getTodayDateString());
+      } else {
+        return _completeSingleTask(task, userId);
       }
-
-      // Add completion details
-      final updatedCompletedBy = [
-        ...task.completedBy,
-        CompletionDetails(userId: userId, completedAt: DateTime.now()),
-      ];
-
-      // Update status to completed if all assigned users have completed
-      String newStatus = task.status;
-      if (updatedCompletedBy.length >= task.assignedToUsers.length) {
-        newStatus = 'completed';
-      } else if (task.isPending) {
-        newStatus = 'in_progress';
-      }
-
-      await _firestore.collection(_collection).doc(taskId).update({
-        'completedBy': updatedCompletedBy.map((c) => c.toMap()).toList(),
-        'status': newStatus,
-      });
-
-      return true;
     } catch (e) {
       throw Exception('Failed to complete task: $e');
     }
   }
 
-  Future<bool> uncompleteTask(String taskId, String userId) async {
-  try {
-    final taskDoc = await _firestore.collection(_collection).doc(taskId).get();
-    if (!taskDoc.exists) return false;
+  // Complete Single Task (private method)
+  Future<bool> _completeSingleTask(TaskModel task, String userId) async {
+    // Check if user already completed this task
+    if (task.isCompletedByUser(userId)) {
+      return true; // Already completed
+    }
 
-    final task = TaskModel.fromFirestore(taskDoc);
-    
+    // Add completion details
+    final updatedCompletedBy = [
+      ...task.completedBy,
+      CompletionDetails(userId: userId, completedAt: DateTime.now()),
+    ];
+
+    // Update status to completed if all assigned users have completed
+    String newStatus = task.status;
+    if (updatedCompletedBy.length >= task.assignedToUsers.length) {
+      newStatus = 'completed';
+    } else if (task.isPending) {
+      newStatus = 'in_progress';
+    }
+
+    await _firestore.collection(_collection).doc(task.id).update({
+      'completedBy': updatedCompletedBy.map((c) => c.toMap()).toList(),
+      'status': newStatus,
+    });
+
+    return true;
+  }
+
+  // Complete Recurring Task (private method)
+  Future<bool> _completeRecurringTask(TaskModel task, String userId, String date) async {
+    // Check if user already completed this task for the specified date
+    if (task.isCompletedForDate(date, userId)) {
+      return true; // Already completed for this date
+    }
+
+    final updatedTask = task.markCompletedForDate(date, userId);
+
+    await _firestore.collection(_collection).doc(task.id).update({
+      'dailyCompletions': updatedTask.dailyCompletions.map((dc) => dc.toMap()).toList(),
+    });
+
+    return true;
+  }
+
+  // Complete Task for Today (convenience method for recurring tasks)
+  Future<bool> completeTaskToday(String taskId, String userId) async {
+    return completeTask(taskId, userId, date: TaskModel.getTodayDateString());
+  }
+
+  // Complete Task for Specific Date (for recurring tasks)
+  Future<bool> completeTaskForDate(String taskId, String userId, String date) async {
+    return completeTask(taskId, userId, date: date);
+  }
+
+  // Uncomplete Task (handles both single and recurring)
+  Future<bool> uncompleteTask(String taskId, String userId, {String? date}) async {
+    try {
+      final taskDoc = await _firestore.collection(_collection).doc(taskId).get();
+      if (!taskDoc.exists) return false;
+
+      final task = TaskModel.fromFirestore(taskDoc);
+
+      if (task.isRecurring) {
+        return _uncompleteRecurringTask(task, userId, date ?? TaskModel.getTodayDateString());
+      } else {
+        return _uncompleteSingleTask(task, userId);
+      }
+    } catch (e) {
+      throw Exception('Failed to uncomplete task: $e');
+    }
+  }
+
+  // Uncomplete Single Task (private method)
+  Future<bool> _uncompleteSingleTask(TaskModel task, String userId) async {
     // Check if user has completed this task
     if (!task.isCompletedByUser(userId)) {
       return true; // User hasn't completed it, nothing to do
@@ -135,18 +255,52 @@ class TasksRepository {
       newStatus = 'completed';
     }
 
-    await _firestore.collection(_collection).doc(taskId).update({
+    await _firestore.collection(_collection).doc(task.id).update({
       'completedBy': updatedCompletedBy.map((c) => c.toMap()).toList(),
       'status': newStatus,
     });
 
     return true;
-  } catch (e) {
-    throw Exception('Failed to uncomplete task: $e');
   }
-}
 
-  // Update Task Status
+  // Uncomplete Recurring Task (private method)
+  Future<bool> _uncompleteRecurringTask(TaskModel task, String userId, String date) async {
+    // Check if user has completed this task for the specified date
+    if (!task.isCompletedForDate(date, userId)) {
+      return true; // User hasn't completed it for this date, nothing to do
+    }
+
+    // Remove user completion for the specified date
+    List<DailyCompletion> updatedCompletions = List.from(task.dailyCompletions);
+    
+    for (int i = 0; i < updatedCompletions.length; i++) {
+      if (updatedCompletions[i].date == date) {
+        final updatedCompletedBy = updatedCompletions[i].completedBy
+            .where((completion) => completion.userId != userId)
+            .toList();
+        
+        if (updatedCompletedBy.isEmpty) {
+          // Remove the entire date entry if no one completed it
+          updatedCompletions.removeAt(i);
+        } else {
+          // Update with remaining completions
+          updatedCompletions[i] = DailyCompletion(
+            date: date,
+            completedBy: updatedCompletedBy,
+          );
+        }
+        break;
+      }
+    }
+
+    await _firestore.collection(_collection).doc(task.id).update({
+      'dailyCompletions': updatedCompletions.map((dc) => dc.toMap()).toList(),
+    });
+
+    return true;
+  }
+
+  // Update Task Status (only for single tasks)
   Future<bool> updateTaskStatus(String taskId, String newStatus) async {
     try {
       await _firestore.collection(_collection).doc(taskId).update({
@@ -181,12 +335,13 @@ class TasksRepository {
     }
   }
 
-  // Get Tasks by Status
+  // Get Tasks by Status (only for single tasks)
   Future<List<TaskModel>> getTasksByStatus(String eventId, String status) async {
     try {
       final querySnapshot = await _firestore
           .collection(_collection)
           .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: false)
           .where('status', isEqualTo: status)
           .orderBy('createdAt', descending: true)
           .get();
@@ -199,13 +354,14 @@ class TasksRepository {
     }
   }
 
-  // Get Overdue Tasks
+  // Get Overdue Tasks (only for single tasks)
   Future<List<TaskModel>> getOverdueTasks(String eventId) async {
     try {
       final now = Timestamp.now();
       final querySnapshot = await _firestore
           .collection(_collection)
           .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: false)
           .where('deadline', isLessThan: now)
           .where('status', whereIn: ['pending', 'in_progress'])
           .get();
@@ -215,6 +371,39 @@ class TasksRepository {
           .toList();
     } catch (e) {
       throw Exception('Failed to fetch overdue tasks: $e');
+    }
+  }
+
+  // Get Recurring Tasks Not Completed Today
+  Future<List<TaskModel>> getRecurringTasksNotCompletedToday(String userId) async {
+    try {
+      final today = TaskModel.getTodayDateString();
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedToUsers', arrayContains: userId)
+          .where('isRecurring', isEqualTo: true)
+          .get();
+
+      final tasks = querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .where((task) => !task.isCompletedToday(userId))
+          .toList();
+
+      return tasks;
+    } catch (e) {
+      throw Exception('Failed to fetch pending recurring tasks: $e');
+    }
+  }
+
+  // Get User's Completion History for Recurring Task
+  Future<List<String>> getUserCompletionHistory(String taskId, String userId) async {
+    try {
+      final task = await getTaskById(taskId);
+      if (task == null || !task.isRecurring) return [];
+      
+      return task.getCompletionDatesForUser(userId);
+    } catch (e) {
+      throw Exception('Failed to fetch completion history: $e');
     }
   }
 
@@ -230,10 +419,58 @@ class TasksRepository {
             .toList());
   }
 
+  Stream<List<TaskModel>> getSingleTasksStream(String eventId) {
+    return _firestore
+        .collection(_collection)
+        .where('eventId', isEqualTo: eventId)
+        .where('isRecurring', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .toList());
+  }
+
+  Stream<List<TaskModel>> getRecurringTasksStream(String eventId) {
+    return _firestore
+        .collection(_collection)
+        .where('eventId', isEqualTo: eventId)
+        .where('isRecurring', isEqualTo: true)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .toList());
+  }
+
   Stream<List<TaskModel>> getUserTasksStream(String userId) {
     return _firestore
         .collection(_collection)
         .where('assignedToUsers', arrayContains: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .toList());
+  }
+
+  Stream<List<TaskModel>> getUserSingleTasksStream(String userId) {
+    return _firestore
+        .collection(_collection)
+        .where('assignedToUsers', arrayContains: userId)
+        .where('isRecurring', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .toList());
+  }
+
+  Stream<List<TaskModel>> getUserRecurringTasksStream(String userId) {
+    return _firestore
+        .collection(_collection)
+        .where('assignedToUsers', arrayContains: userId)
+        .where('isRecurring', isEqualTo: true)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
@@ -289,6 +526,46 @@ class TasksRepository {
           .toList();
     } catch (e) {
       throw Exception('Failed to search tasks: $e');
+    }
+  }
+
+  // Search Single Tasks
+  Future<List<TaskModel>> searchSingleTasks(String eventId, String searchTerm) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: false)
+          .orderBy('title')
+          .startAt([searchTerm])
+          .endAt(['$searchTerm\uf8ff'])
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to search single tasks: $e');
+    }
+  }
+
+  // Search Recurring Tasks
+  Future<List<TaskModel>> searchRecurringTasks(String eventId, String searchTerm) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('eventId', isEqualTo: eventId)
+          .where('isRecurring', isEqualTo: true)
+          .orderBy('title')
+          .startAt([searchTerm])
+          .endAt(['$searchTerm\uf8ff'])
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to search recurring tasks: $e');
     }
   }
 }

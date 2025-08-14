@@ -50,31 +50,28 @@ class EventTasksTab extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // Add Task Button (Admin only)
-                  if (isAdmin) ...[
-                    DefaultButton(
-                      text: 'Add New Task',
-                      press: () async {
-                        // Navigate to create task page and wait for result
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => CreateTaskPage(
-                              eventId: eventId,
-                              currentUserId: currentUserId,
-                            ),
+                  DefaultButton(
+                    text: 'Add New Task',
+                    press: () async {
+                      // Navigate to create task page and wait for result
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CreateTaskPage(
+                            eventId: eventId,
+                            currentUserId: currentUserId,
                           ),
-                        );
+                        ),
+                      );
 
-                        // If task was created successfully, refresh the tasks
-                        if (result == true) {
-                          provider.loadTasks(eventId);
-                        }
-                      },
-                      bgColor: colorScheme.primary,
-                    ),
-                    AppDimensions.h16,
-                  ],
+                      // If task was created successfully, refresh the tasks
+                      if (result == true) {
+                        provider.loadTasks(eventId);
+                      }
+                    },
+                    bgColor: colorScheme.primary,
+                  ),
+                  AppDimensions.h16,
 
                   // Task Statistics
                   _buildTaskStats(context, provider),
@@ -114,39 +111,66 @@ class EventTasksTab extends StatelessWidget {
         color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _buildStatItem(
-              context,
-              label: 'Total',
-              value: provider.totalTasks.toString(),
-              color: colorScheme.primary,
-            ),
+          // First row - Overall stats
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Total',
+                  value: provider.totalTasks.toString(),
+                  color: colorScheme.primary,
+                ),
+              ),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Single Tasks',
+                  value: provider.singleTasksCount.toString(),
+                  color: Colors.blue,
+                ),
+              ),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Recurring',
+                  value: provider.recurringTasksCount.toString(),
+                  color: Colors.purple,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _buildStatItem(
-              context,
-              label: 'Pending',
-              value: provider.pendingCount.toString(),
-              color: Colors.orange,
-            ),
-          ),
-          Expanded(
-            child: _buildStatItem(
-              context,
-              label: 'Completed',
-              value: provider.completedCount.toString(),
-              color: Colors.green,
-            ),
-          ),
-          Expanded(
-            child: _buildStatItem(
-              context,
-              label: 'Overdue',
-              value: provider.overdueCount.toString(),
-              color: Colors.red,
-            ),
+          AppDimensions.h12,
+          // Second row - Single task status (only for single tasks)
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Pending',
+                  value: provider.pendingCount.toString(),
+                  color: Colors.orange,
+                ),
+              ),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Completed',
+                  value: provider.completedCount.toString(),
+                  color: Colors.green,
+                ),
+              ),
+              Expanded(
+                child: _buildStatItem(
+                  context,
+                  label: 'Overdue',
+                  value: provider.overdueCount.toString(),
+                  color: Colors.red,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -188,7 +212,11 @@ class EventTasksTab extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isAssignedToUser = task.isAssignedToUser(currentUserId);
-    final isCompletedByUser = task.isCompletedByUser(currentUserId);
+
+    // FIXED: Handle completion check for both task types
+    final isCompletedByUser = task.isRecurring
+        ? task.isCompletedToday(currentUserId)
+        : task.isCompletedByUser(currentUserId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppDimensions.space12),
@@ -196,7 +224,10 @@ class EventTasksTab extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppDimensions.radius12),
-        border: task.isOverdue ? Border.all(color: Colors.red, width: 1) : null,
+        // FIXED: Only show overdue border for single tasks
+        border: (!task.isRecurring && task.isOverdue)
+            ? Border.all(color: Colors.red, width: 1)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,20 +239,41 @@ class EventTasksTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    BuildText(
-                      text: task.title,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: task.isCompleted
-                          ? colorScheme.onSurface.withOpacity(0.6)
-                          : colorScheme.onSurface,
+                    Row(
+                      children: [
+                        // FIXED: Add recurring indicator
+                        if (task.isRecurring) ...[
+                          Icon(Icons.repeat, size: 16, color: Colors.purple),
+                          AppDimensions.w4,
+                        ],
+                        Expanded(
+                          child: BuildText(
+                            text: task.title,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                (task.isRecurring
+                                    ? isCompletedByUser
+                                    : task.isCompleted)
+                                ? colorScheme.onSurface.withOpacity(0.6)
+                                : colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
                     ),
                     AppDimensions.h4,
                     Row(
                       children: [
                         _buildPriorityChip(context, task.priority),
                         AppDimensions.w8,
-                        _buildStatusChip(context, task.status),
+                        // FIXED: Show different status for recurring tasks
+                        if (task.isRecurring)
+                          _buildRecurrenceChip(
+                            context,
+                            task.recurrenceDisplayName,
+                          )
+                        else
+                          _buildStatusChip(context, task.status),
                       ],
                     ),
                   ],
@@ -233,13 +285,23 @@ class EventTasksTab extends StatelessWidget {
                   value: isCompletedByUser,
                   onChanged: (value) async {
                     if (value == true) {
-                      final success = await provider.completeTask(
-                        task.id,
-                        currentUserId,
-                      );
+                      // FIXED: Use appropriate completion method
+                      final success = task.isRecurring
+                          ? await provider.completeTaskToday(
+                              task.id,
+                              currentUserId,
+                            )
+                          : await provider.completeTask(task.id, currentUserId);
+
                       if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Task completed!')),
+                          SnackBar(
+                            content: Text(
+                              task.isRecurring
+                                  ? 'Task completed for today!'
+                                  : 'Task completed!',
+                            ),
+                          ),
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -254,14 +316,25 @@ class EventTasksTab extends StatelessWidget {
                         context,
                       );
                       if (confirmed) {
-                        final success = await provider.uncompleteTask(
-                          task.id,
-                          currentUserId,
-                        );
+                        // FIXED: Use appropriate uncomplete method
+                        final success = task.isRecurring
+                            ? await provider.uncompleteTaskToday(
+                                task.id,
+                                currentUserId,
+                              )
+                            : await provider.uncompleteTask(
+                                task.id,
+                                currentUserId,
+                              );
+
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Task marked as incomplete'),
+                            SnackBar(
+                              content: Text(
+                                task.isRecurring
+                                    ? 'Task marked as incomplete for today'
+                                    : 'Task marked as incomplete',
+                              ),
                             ),
                           );
                         } else {
@@ -290,13 +363,26 @@ class EventTasksTab extends StatelessWidget {
                   onSelected: (value) async {
                     switch (value) {
                       case 'complete':
-                        final success = await provider.completeTask(
-                          task.id,
-                          currentUserId,
-                        );
+                        // FIXED: Use appropriate completion method
+                        final success = task.isRecurring
+                            ? await provider.completeTaskToday(
+                                task.id,
+                                currentUserId,
+                              )
+                            : await provider.completeTask(
+                                task.id,
+                                currentUserId,
+                              );
+
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Task completed!')),
+                            SnackBar(
+                              content: Text(
+                                task.isRecurring
+                                    ? 'Task completed for today!'
+                                    : 'Task completed!',
+                              ),
+                            ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -311,14 +397,25 @@ class EventTasksTab extends StatelessWidget {
                           context,
                         );
                         if (confirmed) {
-                          final success = await provider.uncompleteTask(
-                            task.id,
-                            currentUserId,
-                          );
+                          // FIXED: Use appropriate uncomplete method
+                          final success = task.isRecurring
+                              ? await provider.uncompleteTaskToday(
+                                  task.id,
+                                  currentUserId,
+                                )
+                              : await provider.uncompleteTask(
+                                  task.id,
+                                  currentUserId,
+                                );
+
                           if (success) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Task marked as incomplete'),
+                              SnackBar(
+                                content: Text(
+                                  task.isRecurring
+                                      ? 'Task marked as incomplete for today'
+                                      : 'Task marked as incomplete',
+                                ),
                               ),
                             );
                           } else {
@@ -356,47 +453,90 @@ class EventTasksTab extends StatelessWidget {
                     List<PopupMenuItem<String>> items = [];
 
                     // Admin completion options
-                    if (!task.isCompleted) {
-                      items.add(
-                        PopupMenuItem(
-                          value: 'complete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Iconsax.tick_circle_outline,
-                                color: Colors.green,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Mark Complete',
-                                style: TextStyle(color: Colors.green),
-                              ),
-                            ],
+                    if (task.isRecurring) {
+                      // For recurring tasks, show today's completion status
+                      if (!task.isCompletedToday(currentUserId)) {
+                        items.add(
+                          PopupMenuItem(
+                            value: 'complete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Iconsax.tick_circle_outline,
+                                  color: Colors.green,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Complete Today',
+                                  style: TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }
+                        );
+                      } else {
+                        items.add(
+                          PopupMenuItem(
+                            value: 'uncomplete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Iconsax.close_circle_outline,
+                                  color: Colors.orange,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Uncomplete Today',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                    } else {
+                      // For single tasks, show regular completion status
+                      if (!task.isCompleted) {
+                        items.add(
+                          PopupMenuItem(
+                            value: 'complete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Iconsax.tick_circle_outline,
+                                  color: Colors.green,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Mark Complete',
+                                  style: TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
 
-                    // Admin uncomplete option (if admin has completed it)
-                    if (task.isCompletedByUser(currentUserId)) {
-                      items.add(
-                        PopupMenuItem(
-                          value: 'uncomplete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Iconsax.close_circle_outline,
-                                color: Colors.orange,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Mark Incomplete',
-                                style: TextStyle(color: Colors.orange),
-                              ),
-                            ],
+                      if (task.isCompletedByUser(currentUserId)) {
+                        items.add(
+                          PopupMenuItem(
+                            value: 'uncomplete',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Iconsax.close_circle_outline,
+                                  color: Colors.orange,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Mark Incomplete',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     }
 
                     // Divider if completion options exist
@@ -452,56 +592,100 @@ class EventTasksTab extends StatelessWidget {
             AppDimensions.h12,
           ],
 
-          // Task Details
-          Row(
-            children: [
-              Icon(
-                Iconsax.calendar_outline,
-                size: 16,
-                color: task.isOverdue
-                    ? Colors.red
-                    : colorScheme.onSurface.withOpacity(0.6),
-              ),
-              AppDimensions.w4,
-              BuildText(
-                text: DateUtilites.formatDetailedDeadline(task.deadline),
-                fontSize: 12,
-                color: task.isOverdue
-                    ? Colors.red
-                    : colorScheme.onSurface.withOpacity(0.6),
-              ),
-              AppDimensions.w16,
-              Icon(
-                Iconsax.people_outline,
-                size: 16,
-                color: colorScheme.onSurface.withOpacity(0.6),
-              ),
-              AppDimensions.w4,
-              BuildText(
-                text: '${task.totalAssignees} assigned',
-                fontSize: 12,
-                color: colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ],
-          ),
+          // Task Details - FIXED: Handle recurring tasks differently
+          if (task.isRecurring) ...[
+            // Recurring task details
+            Row(
+              children: [
+                Icon(Icons.repeat, size: 16, color: Colors.purple),
+                AppDimensions.w4,
+                BuildText(
+                  text: task.recurrenceDisplayName,
+                  fontSize: 12,
+                  color: Colors.purple,
+                ),
+                AppDimensions.w16,
+                Icon(
+                  Iconsax.people_outline,
+                  size: 16,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+                AppDimensions.w4,
+                BuildText(
+                  text: '${task.totalAssignees} assigned',
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ],
+            ),
+          ] else ...[
+            // Single task details
+            Row(
+              children: [
+                Icon(
+                  Iconsax.calendar_outline,
+                  size: 16,
+                  color: task.isOverdue
+                      ? Colors.red
+                      : colorScheme.onSurface.withOpacity(0.6),
+                ),
+                AppDimensions.w4,
+                BuildText(
+                  text: DateUtilites.formatDetailedDeadline(task.deadline!),
+                  fontSize: 12,
+                  color: task.isOverdue
+                      ? Colors.red
+                      : colorScheme.onSurface.withOpacity(0.6),
+                ),
+                AppDimensions.w16,
+                Icon(
+                  Iconsax.people_outline,
+                  size: 16,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+                AppDimensions.w4,
+                BuildText(
+                  text: '${task.totalAssignees} assigned',
+                  fontSize: 12,
+                  color: colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ],
+            ),
+          ],
 
-          // Completion Progress
+          // Completion Progress - FIXED: Handle recurring tasks
           if (task.totalAssignees > 0) ...[
             AppDimensions.h8,
             Row(
               children: [
                 Expanded(
                   child: LinearProgressIndicator(
-                    value: task.completionPercentage / 100,
+                    value: task.isRecurring
+                        ? task.getCompletionPercentageForDate(
+                                TaskModel.getTodayDateString(),
+                              ) /
+                              100
+                        : task.completionPercentage / 100,
                     backgroundColor: colorScheme.onSurface.withOpacity(0.1),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      task.isCompleted ? Colors.green : colorScheme.primary,
+                      task.isRecurring
+                          ? (task.getCompletionCountForDate(
+                                      TaskModel.getTodayDateString(),
+                                    ) ==
+                                    task.totalAssignees
+                                ? Colors.green
+                                : colorScheme.primary)
+                          : (task.isCompleted
+                                ? Colors.green
+                                : colorScheme.primary),
                     ),
                   ),
                 ),
                 AppDimensions.w8,
                 BuildText(
-                  text: '${task.completionPercentage.toInt()}%',
+                  text: task.isRecurring
+                      ? '${task.getCompletionPercentageForDate(TaskModel.getTodayDateString()).toInt()}%'
+                      : '${task.completionPercentage.toInt()}%',
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: colorScheme.onSurface.withOpacity(0.7),
@@ -522,7 +706,9 @@ class EventTasksTab extends StatelessWidget {
                 ),
                 AppDimensions.w4,
                 BuildText(
-                  text: 'Completed by you',
+                  text: task.isRecurring
+                      ? 'Completed today'
+                      : 'Completed by you',
                   fontSize: 12,
                   color: Colors.green,
                 ),
@@ -530,6 +716,25 @@ class EventTasksTab extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecurrenceChip(BuildContext context, String recurrenceType) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.space8,
+        vertical: AppDimensions.space2,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.purple.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppDimensions.radius4),
+      ),
+      child: BuildText(
+        text: recurrenceType.toUpperCase(),
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: Colors.purple,
       ),
     );
   }

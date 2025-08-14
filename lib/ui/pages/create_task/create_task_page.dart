@@ -57,7 +57,9 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
       return;
     }
 
-    if (_provider.selectedDate == null || _provider.selectedTime == null) {
+    // FIXED: Only validate deadline for single tasks
+    if (!_provider.isRecurring &&
+        (_provider.selectedDate == null || _provider.selectedTime == null)) {
       _showSnackBar('Please select deadline date and time');
       return;
     }
@@ -74,7 +76,11 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
       );
 
       if (success && mounted) {
-        _showSnackBar('Task created successfully!');
+        _showSnackBar(
+          _provider.isRecurring
+              ? 'Recurring task created successfully!'
+              : 'Task created successfully!',
+        );
         Navigator.pop(context, true);
       }
     } catch (e) {
